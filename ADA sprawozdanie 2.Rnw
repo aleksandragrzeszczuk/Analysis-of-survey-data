@@ -1,0 +1,660 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[OT4]{polski}
+\usepackage[utf8]{inputenc}
+\usepackage[top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[colorlinks=true, linkcolor=black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{dutchcal}
+\usepackage{mathtools}
+\usepackage{tocloft}
+%\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\DeclareMathOperator{\med}{med}
+
+<<global, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE>>=
+library(knitr)
+library(xtable)
+library(dplyr)
+library(MASS)
+library(sjmisc)
+library(vcd)
+library(xtable)
+library(tidyverse)
+library(stats)
+library(binom)
+library(ramify)
+library(plotrix)
+library(DescTools)
+opts_chunk$set(fig.path='figure/', fig.align='center', fig.pos='H',fig.width=5, fig.height=4)
+pdf.options(encoding='ISOLatin2.enc') #dodało mi to poklskie znaki w LaTeXu, bo wcześniej nie chciały się konwertować
+@
+
+\begin{document}
+\setcounter{page}{0}
+\title{\textsc{Sprawozdanie 2} \\ \large Analiza danych ankietowych}
+\author{Aleksandra Grzeszczuk \\ album 255707 \\[5pt] Jacek Wszoła \\ album 255718}
+\maketitle
+\tableofcontents
+\pagestyle{fancy}
+\thispagestyle{empty}
+\newpage
+
+\section{Lista 1}
+
+\subsection{Zadanie 1}
+
+Dla rozkładu wielomianowego $\mathcal{M}_3(n,\mathbf{p})$ z parametrem $\mathbf{p}=(p_1, p_2, p_3)$ porównamy dwa estymatory i na podstawie symulacji sprawdzimy, który z nich lepiej estymuje nieznany parametr. Dla $n=1,2,3$ mamy estymatory:
+$$\widehat{p}_i = \frac{X_i}{n} \quad \text{oraz} \quad \widetilde{p}_i = \frac{X_i+1/2}{n+3/2}.$$
+Jako wyznacznik przyjmiemy średnią wartość różnicy kwadratów. Poniżej prezentujemy funkcję, której użyjemy do przeprowadzenia symulacji dla różnych wartości $\mathbf{p}$.
+
+<<echo=TRUE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+estymatory <- function(p){
+  est.hat <- c()
+  est.tilde <- c()
+  for(n in c(50, 100, 1000)){
+    X <- rmultinom(1000, size = n, prob = p)
+    p.hat <- X/n
+    p.tilde <- (X+1/2)/(n+3/2)
+    P <- matrix(rep(p, times = 1000), nrow = 3, byrow = FALSE)
+    est.hat <- append(est.hat, 1/1000 * sum((P-p.hat)^2))
+    est.tilde <- append(est.tilde, 1/1000 * sum((P-p.tilde)^2))
+  }
+  zestawienie <- as.data.frame(matrix(c(est.hat, est.tilde),
+                                      nrow = 2, byrow = TRUE))
+  colnames(zestawienie) <- c("$n=50$", "$n=100$", "$n=1000$")
+  rownames(zestawienie) <- c("dla $\\mathbf{\\widehat{p}(X)}$",
+                             "dla $\\mathbf{\\widetilde{p}(X)}$")
+  tab <- xtable(zestawienie, row.names = FALSE, digits = 10,
+         caption = "Kryterium porównawcze dla estymatorów")
+  print(tab, type = "latex", table.placement = "H",
+        sanitize.text.function=function(x){x})
+}
+@
+
+\begin{enumerate}
+
+\item[(a)] $\mathbf{p} = (1/3, 1/3, 1/3)$.
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+estymatory(c(1/3, 1/3, 1/3))
+@
+
+Przypomnijmy, że im średnia wartość różnicy kwadratów mniejsza, tym dokładniejsze przybliżenie. W tym przypadku oba estymatory dają podobne wyniki, z delikatną przewagą $\widetilde{\mathbf{p}}$, jest to jednak znikoma różnica. Rosnącą dokładność wraz ze wzrostem wielokości próby -- dla $n=50$ mamy błąd rzędu 0.01, zaś dla $n=1000$ jest to już rząd 0.0001.
+
+\item[(b)] $\mathbf{p} = (1/10, 4/5, 1/10)$.
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+estymatory(c(1/10, 4/5, 1/10))
+@
+
+Tendencja jest podobna do punktu (a). Oba estymatory zachowują tę samą dokładność z małą przewagą $\widetilde{\mathbf{p}}$. Jednak w tym przypadku obserwujemy znacznie mniejszą wartość błędu, który jest o około połowę mniejszy dla każdej z badanych wielkości prób.
+
+\item[(c)] $\mathbf{p} = (2/5, 1/5, 2/5)$.
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+estymatory(c(2/5, 1/5, 2/5))
+@
+
+Zauważamy podobną sytuację jak w punkcie (a). Również rzędy przybliżeń zgadzają się z pierwszym przypadkiem. 
+
+\end{enumerate}
+
+Biorąc pod uwagę powyższe przypadki, możemy sformułować hipotezę, że im większa amplituda prawdopodobieństw w wektorze $\mathbf{p}$, tym mniejsza precyzja estymacji dla obu estymatorów. W każdym badanym przypadku wielkość próby jest proporcjonalna do dokładności. Co więcej, za każdym razem lepsze wyniki osiągał estymator $\widetilde{\mathbf{p}}$, więc to jego powinniśmy wybrać.
+
+\subsection{Zadanie 2}
+
+Zajmiemy się teraz testowaniem hipotez dotyczących rozkładu wielomianowego $\mathcal{M}_k(n,\mathbf{p})$. Przyjrzymy się problemom testowania hipotez typu $$H_0: \mathbf{p} = \mathbf{p}_0 \quad \text{przeciwko} \quad \mathbf{p} \neq \mathbf{p}_0.$$ W tym celu napiszemy funkcje, które będą zwracać $p$-value dla trzech możliwych do wyboru przez użytkownika testów: $\chi^2$
+Pearsona, $\chi^2$ największej wiarygodności oraz Walda.
+
+<<echo=TRUE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+hip.test <- function(X, p0, type = "Pearson"){
+  k <- length(p0)
+  n <- sum(X)
+  if(type == "Pearson"){
+    chi2 <- sum((X-n*p0)^2/(n*p0))
+    return(1-pchisq(chi2, df = k-1))
+  }
+  if(type == "ML"){
+    G2 <- 2*sum(X*log(X/(n*p0)))
+    return(1-pchisq(G2, df = k-1))
+  }
+  if(type == "Wald"){
+    W <- sum((X-n*p0)^2/X)
+    return(1-pchisq(W, df = k-1))
+  }
+}
+@
+
+Aby sprawdzić poprawność działania naszej funkcji, możemy posłużyć się danymi Darwina. Ustalił on, że dla wektora obserwacji $X = (315, 108, 101, 32)$ wektor prawdopodobieństw $\mathbf{p}$ określający rozkład, z którego zaobserwowano dane, powinien wynosić $\mathbf{p} = (9/16, 3/16, 3/16, 1/16)$. I właśnie takie $\mathbf{p}_0$ weźmy.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+X <- c(315, 108, 101, 32)
+p0 <- c(9/16, 3/16, 3/16, 1/16)
+hip.test(X, p0, type = "Pearson")
+hip.test(X, p0, type = "ML")
+hip.test(X, p0, type = "Wald")
+@
+
+Rzeczywiście, dla wszystkich przypadków $p$-value wyszło bliskie jedynki, zatem nie mamy podstaw do odrzucenia hipotezy.
+
+\subsection{Zadanie 3}
+
+W pewnej bardzo dużej korporacji zostały przeprowadzone badania zadowolenia z pracy. Anonimowo zapytano $901$ pracowników o ich stopień zadowolenia z pracy. Wyniki były następujące: 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+wyniki <- paste0(c("bardzo niezadowoleni", "niezadowoleni", "zadowoleni", "bardzo zadowoleni"))
+liczba <- paste0(c("62", "108", "319", "412"))
+tabela <- data.frame(c(wyniki),
+                     c(liczba))
+colnames(tabela) <- paste0(c("STOPIEŃ ZADOWOLENIA", "LICZBA OSÓB"))
+tab1 <- xtable(tabela, caption = "Stopień zadowolenia z pracy 901 osób")
+print(tab1, type = "latex", table.placement = "H")
+@
+Na podstawie powyższych danych oszacujemy przedziałowo prawdopodobieństwo stopnia zadowolenia na przyjętym poziomie ufności $\alpha = 0.95$.
+Wykorzystamy do tego gotową funkcję \texttt{MultinomCI} dostępną w pakiecie \texttt{DescTools}.
+
+<<echo = FALSE, eval = TRUE>>=
+p <- c(62, 108, 319, 412)
+MultinomCI(p)
+@
+
+Analizując powyższą tabelkę widzimy, że na przyjętym poziomie ufności $\alpha = 0.95$ przedziały ufności wynoszą kolejno:
+
+\begin{itemize}
+\item Ludzie bardzo niezadowoleni z pracy: $4 \% \ - \ 10 \%$ ($6 \%$)
+\item Ludzie niezadowoleni z pracy: $9 \% \ - \ 16 \%$ ($7 \%$)
+\item Ludzie zadowoleni z pracy: $32 \% \ - \ 39 \%$ ($7 \%$)
+\item Ludzie bardzo zadowoleni z pracy: $42 \% \ - \ 50 \%$ ($8 \%$)
+\end{itemize}
+
+W każdym z wyznaczonych przedziałów różnica między górnym a dolnym oszacowaniem wynosi około $7 \%$, czyli jest to dość wąski przedział, co oznacza, że nasze dopasowanie jest pewne.
+
+\subsection{Zadanie 4}
+
+W poprzednim zadaniu oprócz stopnia zadowolenia z pracy pytano również o wysokość ich wynagrodzenia. W grupie $108$ osób niezadowolonych z pracy wyniki były następujące:
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+money <- paste0(c("... - 6000$", "6000$ - 15000$", "15000$ - 25000$", "25000$ - ..."))
+osoby <- paste0(c("24", "38", "28", "18"))
+tabela1 <- data.frame(c(money),
+                     c(osoby))
+colnames(tabela1) <- paste0(c("WYNAGRODZENIE", "LICZBA OSÓB"))
+tab2 <- xtable(tabela1, caption = "Wynagrodzenie badanych 108 osób niezadowolonych z pracy")
+print(tab2, type = "latex", table.placement = "H")
+@
+
+Na podstawie powyższych danych, na poziomie istotności $\alpha = 0.05$, zweryfikujemy hipotezę, że w grupie pracowników niezadowolonych z pracy, rozkład zarobków w powyższych czterech kategoriach jest równomierny. Wykorzystamy do tego wyżej napisaną funkcję \texttt{hip.test}.
+
+<<echo = TRUE, eval = TRUE>>=
+hip.test(c(24,38,28,18),c(1/4, 1/4, 1/4, 1/4), "Pearson")
+hip.test(c(24,38,28,18),c(1/4, 1/4, 1/4, 1/4), "ML")
+hip.test(c(24,38,28,18),c(1/4, 1/4, 1/4, 1/4), "Wald")
+@
+
+Widzimy, że wyznaczone wartości są prawie identyczne - bardzo małe, wahające się w okolicach $0.05$. Ostatecznie stwierdzamy, że w grupie osób niezadowolonych z pracy rozkład zarobków jest równomierny. To znaczy, że jest jednakowe prawdopodobieństwo, że pracownik niezadowolony z pracy zarabia mniej niż $6000 \$ $, od $6000 \$ $ do $15000 \$ $, powyżej $15000 \$ $, ale poniżej $25000 \$ $ oraz $25000 \$ $ lub więcej. 
+
+\newpage
+
+\section{Lista 2}
+
+\subsection{Zadanie 1}\label{z1l2}
+
+W tym zadaniu na podstawie obserwacji startu promu kosmicznego, ściślej: uszkodzeń pierścieni oraz temperatury otoczenia, na poziomie istotności $\alpha = 0.05$ zweryfikujemy hipotezę dotycząca niezależności obu zmiennych. Zaobserwowane zdyskretyzowane wartości przedstawiamy w poniższej tabeli. 
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+data <- as.data.frame(matrix(c(0, 17, 17, 4, 3, 7, 4, 20, 24), byrow = TRUE, nrow = 3))
+colnames(data) <- c("$\\leq 65^\\circ F$", "$> 65^\\circ F$", "$\\Sigma_\\text{uszk}$")
+rownames(data) <- c("Nie", "Tak", "$\\Sigma_T$")
+data.tab <- xtable(data, caption = "Obserwacje startu promu kosmicznego")
+align(data.tab) <- "|r|ccc|"
+digits(data.tab) <- 0
+print(data.tab, type = "latex",
+      table.placement = "H", sanitize.text.function=function(x){x})
+@
+
+Ponieważ mamy do czynienia z tabelą $2 \times 2$, więc do weryfikacji hipotezy o niezależności zmiennych użyjemy testu Fishera. Jest on szczególnym przypadkiem testu Freemana-Haltona. Do zaimplementowania tej metody użyjemy funkcji \texttt{fisher.test()}. Otrzymujemy $p$-value równe około $0.003 < \alpha$, więc hipotezę o niezależności zmiennych odrzucimy z prawdopodobieństwem 1.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+M <- matrix(c(0, 17, 4, 3), byrow = TRUE, nrow = 2)
+fisher.test(M)$p.value
+@
+
+\subsection{Zadanie 2}
+
+Jak już wiemy, dane w pliku \texttt{Reakcja.csv} zawierają informację o reakcji na lek (zmienna \texttt{Reakcja} na poziomie $0$, gdy nie nastąpiła poprawa i na poziomie $1$, gdy nastąpiła poprawa) w~różnych dawkach - zmienna \texttt{Dawka}, dwóch firm farmaceutycznych pacjentów leczonych w~domu ($0$) bądź w szpitalu $(1)$. 
+
+<<echo = FALSE, eval = TRUE, message=FALSE>>=
+dane <- read.csv("C:/Users/olagr/Desktop/ADA/Reakcja.csv", sep = ";")
+@
+
+<<echo = FALSE, eval = TRUE, message=FALSE>>=
+dane <- mutate(dane, Reakcja = as.factor(Reakcja),
+             Dawka = as.factor(Dawka),
+             Rodzaj = as.factor(Rodzaj),
+             Miejsce = as.factor(Miejsce),
+             Reakcja = fct_recode(Reakcja,"Nie ma poprawy" = "0","Jest poprawa" = "1"),
+             Miejsce = fct_recode(Miejsce, "Dom" = "0", "Szpital" = "1"))
+@
+
+Na podstawie uzyskanych danych znajdziemy odpowiedz, na pytanie, czy skuteczność leczenia (zmienna \texttt{Reakcja}) jest niezależna od wielkości dawki (zmienna \texttt{Dawka}). Wykorzystamy w~tym celu test chi-kwadrat Pearsona. 
+
+<<echo = TRUE, eval = TRUE>>=
+RD <- table(dane$Reakcja, dane$Dawka)
+chisq.test(RD, simulate.p.value = TRUE)
+@
+
+Wartość poziomu krytycznego wynosi w tym teście:
+
+<<echo = FALSE, eval = TRUE>>=
+chisq.test(RD, simulate.p.value = TRUE)$p.value
+@
+
+Jest ona znikomo mała, zatem odrzucamy hipotezę o niezależnośći skuteczności leczenia od wielkości dawki. \\
+
+Dalej zbadamy niezależność skuteczności leczenia a rodzaju leku. 
+
+<<echo = TRUE, eval = TRUE>>=
+RR <- table(dane$Reakcja, dane$Rodzaj)
+chisq.test(RR)
+@
+
+W tym przypadku wartość poziomu krytycznego wynosi 
+
+<<echo = FALSE, eval = TRUE>>=
+chisq.test(RR)$p.value
+@
+
+Co jest wyższe od poziomu istotności $\alpha = 0.05$, zatem przyjmujemy hipotezę zerową o niezależności skuteczności leczenia a rodzaju leku. To oznacza, że obydwa leki działają poprawnie i nie ma między nimi większych dysproporcji.\\
+
+Ostatecznie zbadamy niezależności skuteczności leczenia od miejsca leczenia. 
+
+<<echo = TRUE, eval = TRUE>>=
+RM <- table(dane$Reakcja, dane$Miejsce)
+chisq.test(RM)
+@
+
+Wartość poziomu krytycznego ponownie jest bardzo mała i wynosi zaledwie
+
+<<echo = FALSE, eval = TRUE>>=
+chisq.test(RM)$p.value
+@
+
+Zatem odrzucamy hipotezę zerową o niezależności skuteczności leczenia od miejsca leczenia. \\
+
+Podsumowując powyższe zadanie, otrzymane wyniki wydają się bardzo rzeczywiste. Na skuteczność leczenia faktycznie ma wpływ wielkość dawki - czy przyjmiemy jej więcej, czy mniej a także miejsce leczenia. Oczywistym jest, że w przebywając w szpitalu w większości przypadków szybciej wyzdrowiejemy - zajmie się tam nami wyspecjalizowana kadra, zawsze otrzymamy potrzebną, profesjonalną pomoc. Ponadto na skuteczność leczenia nie ma wpływu rodzaj leku - to dobrze, ponieważ obydwa leki muszą bazować na tych samych składnikach i~obydwa dają podobne rezulataty. \\
+
+W zadaniu skorzystałam z testu chi-kwadrat Pearsona, ponieważ jest on najczęściej używanym w praktyce testem. Można go wykorzystać do badania zgodności zarówno cech mierzalnych, jak i niemierzalnych. Ten test wykonuje statystykę testową:
+
+$$ X^2 = \sum_{i = 1}^{R} \sum_{j = 1}^{C} \frac{(n_{ij} - (n_{i+}n_{+j})/n)^2}{(n_{i+}n_{+j})/n} $$ 
+
+Dodatkowo, w celu porównania wyników wyznaczę wartości krytyczne korzystając z testu Fishera. 
+
+<<echo = TRUE, eval = TRUE>>=
+fisher.test(RD)$p.value #REAKCJA/DAWKA
+fisher.test(RR)$p.value #REAKCJA/RODZAJ
+fisher.test(RM)$p.value #REAKCJA/MIEJSCE
+@
+
+Otrzymane wyniki dają nam takie same wnioski jak te opisane powyżej. 
+
+\subsection{Zadanie 3}
+
+Ponownie zajmiemy się danymi przeprowadzonymi w pewnej bardzo dużej korporacji. Tym razem znamy już wynagrodzenie wszystkich osób zadowolonych bądź też nie ze swojej pracy. Korzystając z funkcji \texttt{chisq.test} na poziomie istotności $\alpha = 0.05$ zweryfikujemy hipotezę o~niezależności stopnia zadowolenia z pracy i wynagrodzenia na podstawie danych zawartych w~poniższej tabeli: 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+money <- paste0(c("... - 6000", "6000 - 15000", "15000 - 25000", "25000 - ..."))
+osobyBN <- paste0(c("20", "22", "13", "7"))
+osobyN <- paste0(c("24", "38", "28", "18"))
+osobyZ <- paste0(c("80", "104", "81", "54"))
+osobyBZ <- paste0(c("82", "125", "113", "92"))
+tabela1 <- data.frame(c(money),
+                     c(osobyBN),
+                     c(osobyN),
+                     c(osobyZ),
+                     c(osobyBZ))
+colnames(tabela1) <- paste0(c("WYNAGRODZENIE", "BN", "N", "Z", "BZ"))
+tab2 <- xtable(tabela1, caption = "Wynagrodzenie badanych 901 osób i ich stopień zadowolenia")
+print(tab2, type = "latex", table.placement = "H")
+@
+
+Gdzie $BN$ - oznacza osoby bardzo niezadowolone z pracy, $N$ - osoby niezadowolone, $Z$- osoby zadowolone oraz $BZ$ - osoby bardzo zadowolone. 
+
+<<echo = TRUE, eval = TRUE>>=
+m <- matrix(c(20, 24, 80, 82, 22, 38, 104, 125, 13, 28, 81, 113, 7, 18, 54, 92), 
+            nrow = 4, byrow = TRUE)
+chisq.test(m)
+@
+
+Korzystając z testu chi-kwadrat Pearsona bez poprawki, na poziomie istotności $\alpha = 0.05$ nie mamy podstaw do odrzucenia hipotezy zerowej, więc przyjmujemy, że dane są niezależne. Wartość poziomu krytycznego w tym teście wynosi $0.214$. Obliczymy teraz wartośc testu chi-kwadrat Pearsona z naniesioną poprawką:
+
+<<echo = TRUE, eval = TRUE>>=
+chisq.test(m, simulate.p.value = TRUE)
+@
+
+Poziom krytczyny wynosi $0.2154$ co nadal jest powyżej poziomu istotności $\alpha = 0.05$. Zatem ponownie nie odrzucamy hipotezy zerowej. \\
+
+
+\subsection{Zadanie 4}
+
+Stworzymy funkcję, która dla danych w tablicy dwudzielczej oblicza wartość $p$-value w teście niezależności opartym na ilorazie wiarogodności. Wiadomo, że statystyka testowa to $$G^2 = -\log \lambda, \; \text{gdzie} \; \lambda = \prod_{i,j} \left( \frac{n_{i+}n_{j+}}{nn_{ij}}  \right)^{n_{ij}}$$ i dąży ona według rozkładu do rozkładu $\chi^2_{(R-1)(C-1)}$, gdzie $R,C$ to odpowiednio liczba wierszy i kolumn tabeli, a $n$ jest liczbą ankietowanych, tzn. $n = \sum_{j} n_{j+} = \sum_i n_{i+} = \sum_{i,j} n_{ij}$. Zatem wartość $p$-value obliczymy ze wzoru $p = 1-F_{\chi^2_{(R-1)(C-1)}}(G^2(x))$.
+
+<<echo=TRUE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+test.iw <- function(X){
+  n <- sum(X)
+  C <- ncol(X)
+  R <- nrow(X)
+  ni <- rowSums(X)
+  nj <- colSums(X)
+  lambda <- 1
+  for(i in 1:R){
+    for(j in 1:C){
+      lambda <- lambda * ((ni[i]*nj[j])/(n*X[i,j]))^(X[i,j])
+    }
+  }
+  G2 <- -2*log(prod(lambda))
+  p <- 1 - pchisq(G2, (R-1)*(C-1))
+  return(p)
+}
+@
+
+Poprawność funkcji sprawdzimy dla danych z zadania \ref{z1l2}. Obserwujemy, że wartość funkcji ($p$-value) dla tych danych jest bliska zeru, a więc hipotezę z prawdopodobieństwem 1 należy odrzucić. Podobny wynik otrzymaliśmy przy użyciu testu Fishera, zatem możemy przypuszczać, że nasza funkcja dzała poprawnie.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+X <- matrix(c(0, 17, 4, 3), byrow = T, nrow = 2)
+test.iw(X)
+@
+
+\section{Lista 3}
+
+\subsection{Zadanie 1}
+
+Ponownie skorzystamy z danych z pliku \texttt{reakcja.csv}. Tym razem skupimy się na zmiennych reakcja, dawka, miejsce; zbadamy ich niezależność i, o ile hipotezę o niezależności będziemy mogli odrzucić, obliczymy odpowiednie miary współzmienności tych zmiennych.
+
+Na wykładzie omówione zostało pięć miar współzmienności. Na początku dla każdego współczynnika napiszemy odpowiednią funkcję, która wylicza jego wartość na podstawie danych w postaci tabeli. Następnie dla badanych zmiennych zestawimy wszystkie współczynniki w tabeli i wyciągniemy odpowiednie wnioski, o ile testy niezależności pokażą, że hipotezę o niezależności można odrzucić.
+
+\begin{enumerate}
+\item[(a)] Współczynnik $\tau$ Goodmana.
+
+<<echo=TRUE, eval=TRUE, results='hide', message=FALSE, warning=FALSE>>=
+tau <- function(t){
+  R <- nrow(t)
+  C <- ncol(t)
+  n <- sum(t)
+  K <- 0
+  L <- 0
+  for(i in 1:R){
+    for(j in 1:C){
+      K <- K+t[i,j]^2/(n*sum(t[i,]))
+    }
+  }
+  for(j in 1:C){
+    L <- L+(sum(t[,j])/n)^2
+  }
+  return((K-L)/(1-L))
+}
+@
+
+\item[(b)] Współczynnik $V$ Craméra.
+
+<<echo=TRUE, eval=TRUE, results='hide', message=FALSE, warning=FALSE>>=
+#na początku funkcja definiująca statystykę z testu chi2 Pearsona
+X2 <- function(t){
+  R <- nrow(t)
+  C <- ncol(t)
+  n <- sum(t)
+  x2 <- 0
+  for(i in 1:R){
+    for(j in 1:C){
+      x2 <- x2 + (t[i,j]-sum(t[i,])*sum(t[,j])/n)^2/(sum(t[i,])*sum(t[,j])/n)
+    }
+  }
+  return(x2)
+}
+
+V <- function(t){
+  R <- nrow(t)
+  C <- ncol(t)
+  n <- sum(t)
+  v <- X2(t)/(n*min(R-1, C-1))
+  return(sqrt(v))
+}
+@
+
+\item[(c)] Współczynnik $T$ Czuprowa.
+
+<<echo=TRUE, eval=TRUE, results='hide', message=FALSE, warning=FALSE>>=
+T.cz <- function(t){
+  R <- nrow(t)
+  C <- ncol(t)
+  n <- sum(t)
+  t.cz <- X2(t)/(n*sqrt((R-1)*(C-1)))
+  return(sqrt(t.cz))
+}
+@
+
+\item[(d)] Współczynnik $\varphi$.
+
+<<echo=TRUE, eval=TRUE, results='hide', message=FALSE, warning=FALSE>>=
+Phi <- function(t){
+  n <- sum(t)
+  phi <- X2(t)/n
+  return(sqrt(phi))
+}
+@
+
+\item[(d)] Współczynnik $C$ Pearsona
+
+<<echo=TRUE, eval=TRUE, results='hide', message=FALSE, warning=FALSE>>=
+C.p <- function(t){
+  n <- sum(t)
+  c.p <- X2(t)/(X2(t)+n)
+  return(sqrt(c.p))
+}
+@
+
+\end{enumerate}
+
+\subsubsection{Reakcja a miejsce}
+
+W tym przypadku mamy do czynienia z tablicą $2 \times 2$. Odpowiednie wartości prezentujemy w poniższej tabeli, gdzie wiersze odpowiadają zmiennej reakcja, a kolumny -- zmiennej miejsce:
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+dane <- read.csv("C:/Users/olagr/Desktop/ADA/Reakcja.csv", sep = ";")
+t1 <- table(dane$Reakcja, dane$Miejsce)
+colnames(t1) <- c("dom", "szpital")
+rownames(t1) <- c("nie", "tak")
+print(xtable(t1, align = "|r|cc|", caption = "Zestawienie zmiennych reakcja i miejsce"))
+@
+
+Do weryfikacji hipotezy o niezależności zmienych możemy użyć chi kwadrat Pearsona. Obserwujemy znikomo małą wartość poziomu krytycznego, więc hipotezę o niezależności odrzucamy z prawdopodobieństwem 1.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+chisq.test(t1)$p.value
+@
+
+Odpowiednie miary współzmienności przedstawiamy w poniższej tabeli. Rzeczywiście, zgodnie z własnością tabeli $2 \times 2$, mamy $\tau = V^2 = T^2 = \varphi^2$. W interpretacji skupimy się więc na współczynniku $\tau$, którego wartość jest bliska zeru, co świadczy o bardzo słabym powiązaniu badanych zmiennych, niemal rzeczywistej niezależności.
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+wsp1 <- matrix(c(tau(t1), V(t1), T.cz(t1), Phi(t1), C.p(t1)), nrow = 1)
+colnames(wsp1) <- c("$\\tau$", "$V$", "$T$", "$\\varphi$","$C$")
+print(xtable(wsp1, align = "|c|c|c|c|c|c|", caption = "Miary współzmienności dla zmiennych reakcja, miejsce", digits = 5), sanitize.text.function=function(x){x}, include.rownames = FALSE)
+@
+
+\subsubsection{Reakcja a dawka}
+
+Zbadamy teraz relację miedzy zmiennymi reakcja i dawka. Mamy do czynienia z tablicą $2 \times 5$ i podobnie jak poprzednio, odpowiednie wartości prezentujemy poniżej, gdzie wiersze odpowiadają zmiennej reakcja, a kolumny -- zmiennej dawka (w skali logarytmicznej):
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+t2 <- table(dane$Reakcja, dane$Dawka)
+rownames(t2) <- c("nie", "tak")
+print(xtable(t2, align = "|r|ccccc|", caption = "Zestawienie zmiennych reakcja i dawka"))
+@
+
+Ponownie, uzwywamy testu chi kwadrat Pearsona do weryfikacji hipotezy niezależności i ponownie, otrzymujemy znikomo małe $p$-value, więc hipotezę o niezależności odrzucamy z prawdopodobieństwem 1.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+chisq.test(t2)$p.value
+@
+
+Do obliczenia odpowiednich miar współzmiennności użyjemy funkcji zdefiniowanych poprzednio. Widzimy, że wartość współczynnika $\tau$ jest bliska zeru, jednak nie na tyle bliska, jak w przypadku zmiennych reakcja i miejsce. Na tej podstawie możemy stwierdzić, że -- mimo wyników testu o niezależności -- są one mniej zależne niż zmienne reakcja, dawka.
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+wsp2 <- matrix(c(tau(t2), V(t2), T.cz(t2), Phi(t2), C.p(t2)), nrow = 1)
+colnames(wsp2) <- c("$\\tau$", "$V$", "$T$", "$\\varphi$","$C$")
+print(xtable(wsp2, align = "|c|c|c|c|c|c|", caption = "Miary współzmienności dla zmiennych reakcja, dawka", digits = 5), sanitize.text.function=function(x){x}, include.rownames = FALSE)
+@
+
+\subsection{Zadanie 2}
+
+Na podstawie danych zawartych w poniższej tabelii obliczymy odpowiednią miarę współzmienności zmiennych \texttt{wynagrodzenie} oraz \texttt{stopień zadowolenia z pracy}. 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+money <- paste0(c("... - 6000", "6000 - 15000", "15000 - 25000", "25000 - ..."))
+osobyBN <- paste0(c("32", "22", "13", "3"))
+osobyN <- paste0(c("44", "38", "48", "18"))
+osobyZ <- paste0(c("60", "104", "61", "54"))
+osobyBZ <- paste0(c("70", "125", "113", "96"))
+tabela1 <- data.frame(c(money),
+                     c(osobyBN),
+                     c(osobyN),
+                     c(osobyZ),
+                     c(osobyBZ))
+colnames(tabela1) <- paste0(c("WYNAGRODZENIE", "BN", "N", "Z", "BZ"))
+tab2 <- xtable(tabela1, caption = "Wynagrodzenie badanych 901 osób i ich stopień zadowolenia")
+print(tab2, type = "latex", table.placement = "H")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+z <- matrix(c(32, 44, 60, 70, 22, 38, 104, 125, 13, 48, 61, 113, 3, 18, 54, 96),
+            nrow = 4, byrow = TRUE)
+@
+
+Użyjemy testu chi-kwadrat Pearsona w celu wyznaczenia $p-value$.
+
+<<echo = FALSE, eval = TRUE>>=
+chisq.test(z)
+@
+
+Otrzymaliśmy bardzo małą wartość poziomu krytycznego, zatem odrzucamy hipotezę o niezależności zmiennych \texttt{wynagrodzenie} oraz \texttt{stopień zadowolenia z pracy}. \\
+
+Do obliczenia miary współzmienności gamma skorzystamy z funkcji zdefiniowanej w~zadaniu powyżej. 
+
+<<echo=FALSE, eval=TRUE, message=FALSE, warning=FALSE>>=
+gamma <- Phi(z)
+gamma
+@
+
+Wykorzystaliśmy tutaj miarę gamma, ponieważ mamy do czynienia ze zmiennymi o uporządkowanych kategoriach.  \\
+
+Przeprowadzimy teraz analizę korespondencji, która jest opisową i eksploracyjną techniką dostarczająca nam informacji o strukturze powiązań między dwiema jakościowymi zmiennymi losowymi. \\
+
+Żeby zbadać strukturę powiązań wynagrodzenia oraz stopnia zadowolenia z pracy przeanalizujemy empiryczne rozkłady warunkowe. Wyniki przedstawia poniższa tabela: 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+money <- paste0(c("... - 6000", "6000 - 15000", "15000 - 25000", "25000 - ...", "Rozkład empiryczny"))
+osobyBN <- paste0(c("0,16", "0,08", "0,05", "0,02", "0,08"))
+osobyN <- paste0(c("0,21", "0,13", "0,21", "0,10", "0,16"))
+osobyZ <- paste0(c("0,29", "0,36", "0,26", "0,32", "0,31"))
+osobyBZ <- paste0(c("0,34", "0,43", "0,48", "0,56", "0,45"))
+SUMA <- paste0(c("1", "1", "1", "1", "1"))
+tabela2 <- data.frame(c(money),
+                     c(osobyBN),
+                     c(osobyN),
+                     c(osobyZ),
+                     c(osobyBZ),
+                     c(SUMA))
+colnames(tabela2) <- paste0(c("WYNAGRODZENIE", "BN", "N", "Z", "BZ", "SUMA"))
+  tab3 <- xtable(tabela2, caption = "Rozkłady empiryczne w wierszach")
+print(tab3, type = "latex", table.placement = "H")
+@
+
+Z powyższej tabeli wynika, że odsetek osób bardzo niezadowolonych z pracy i zarabiających powyżej $25000$ zł jest aż $8$ razy niższy niż liczba osób bardzo niezadowolonych i zarabijących mniej niż $6000$. \\
+
+Graficzna prezentacja związku między stopniem zadowolenia z pracy a wysokością wynagrodzenia:
+
+<<echo = TRUE, eval = TRUE, fig.cap="Analiza korespondencji", fig.width=8, fig.height=5>>=
+z <- matrix(c(32, 44, 60, 70, 22, 38, 104, 125, 13, 48, 61, 113, 3, 18, 54, 96),
+            nrow = 4, byrow = TRUE)
+plot(ca::ca(z))
+@
+
+\subsection{Zadanie 3}
+
+$200$ klientów (w różnym wieku) kilku aptek zapytano, jaki lek przeciwbólowy zwykle stosują. Zebrane dane znajdują się w tabelce poniżej. Na podstawie tych danych obliczymy odpowiednie miary współzmienności oraz przeprowadzimy analizę korespondencji. 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#LEK <- paste0(c("Ibuprom", "Apap", "Paracetamol", "Ibuprofen", "Panadol"))
+I <- paste0(c("35", "22", "15", "0", "18"))
+A <- paste0(c("0", "22", "15", "40", "3"))
+P <- paste0(c("0", "0", "15", "10", "5"))
+tabela4 <- data.frame(c(I),
+                     c(A),
+                     c(P))
+colnames(tabela4) <- paste0(c("do lat 35", "od 36 do 55", "powyżej 55"))
+rownames(tabela4) <- paste0(c("Ibuprom", "Apap", "Paracetamol", "Ibuprofen", "Panadol"))
+tab5 <- xtable(tabela4, caption = "Dane dotyczące środków przeciwbólowych")
+print(tab5, type = "latex", table.placement = "H")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+apt <- matrix(c(35, 0, 0, 22, 22, 0, 15, 15, 15, 0, 40, 10, 18, 3, 5),
+            nrow = 5, byrow = TRUE)
+@
+
+Obliczymy miarę współzmienności $\tau$ Goodmana, ponieważ nie mamy tutaj sytuacji $2x2$:
+
+<<echo = FALSE, eval = TRUE>>=
+tau(apt)
+@
+
+Wyznaczymy teraz macierz korespondencji:
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+I <- paste0(c("0,35", "0,22", "0,15", "0", "0,18"))
+A <- paste0(c("0", "0,22", "0,15", "0,4", "0,03"))
+P <- paste0(c("0", "0", "0,15", "0,1", "0,05"))
+tabela4 <- data.frame(c(I),
+                     c(A),
+                     c(P))
+colnames(tabela4) <- paste0(c("do lat 35", "od 36 do 55", "powyżej 55"))
+rownames(tabela4) <- paste0(c("Ibuprom", "Apap", "Paracetamol", "Ibuprofen", "Panadol"))
+tab5 <- xtable(tabela4, caption = "Macierz korespondencji")
+print(tab5, type = "latex", table.placement = "H")
+@
+
+Oraz macierz profili wierszowych:
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+I <- paste0(c("1", "0.5", "0,33", "0", "0,7"))
+A <- paste0(c("0", "0.5", "0,33", "0,8", "0,12"))
+P <- paste0(c("0", "0", "0,33", "0,2", "0,18"))
+tabela4 <- data.frame(c(I),
+                     c(A),
+                     c(P))
+colnames(tabela4) <- paste0(c("do lat 35", "od 36 do 55", "powyżej 55"))
+rownames(tabela4) <- paste0(c("Ibuprom", "Apap", "Paracetamol", "Ibuprofen", "Panadol"))
+tab5 <- xtable(tabela4, caption = "Macierz profili wierszowych")
+print(tab5, type = "latex", table.placement = "H")
+@
+
+Widzimy, że aż $100 \%$ więcej osób w wieku do $35$ lat używa Ibuprom zamiast Ibuprofenu. Wydaje się więc, że jest to jeden z najpopluarniejszych środków przeciwbólowych w tej grupie wiekowej. Zaraz po nim jest Panadol - również używa go duży odsetek osób. \\
+
+W następnym przedziale wiekowym sytuacja już się zmienia - w badanej grupie nikt nie używa już Ibupromu, króluje za to Ibuprofen. \\
+
+W grupie osób powyżej $55$ roku życia używane są już tylko: Paracetamol, Ibuprofen oraz Panadol. \\
+
+Środkiem używanym przez wszystkie grupy wiekowe jest Paracetamol oraz Panadol. \\
+
+Następnie korzystając z dostępnej w pakiecie \texttt{R} funkcji \texttt{ca} z biblioteki \texttt{ca} wyznaczymy odpowiednie wykresy oraz graficznie zaprezentujemy analizę korespondencji. 
+
+
+<<echo = FALSE, eval = TRUE, fig.width=8, fig.height=5, fig.cap="Analiza korespondencji">>=
+ca::ca(apt)
+plot(ca::ca(apt))
+@
+
+
+\end{document}

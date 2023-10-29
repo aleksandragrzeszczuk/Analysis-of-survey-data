@@ -1,0 +1,838 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[OT4]{polski}
+\usepackage[utf8]{inputenc}
+\usepackage[top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[colorlinks=true, linkcolor=black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{dutchcal}
+\usepackage{mathtools}
+\usepackage{tocloft}
+%\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\DeclareMathOperator{\med}{med}
+
+<<global, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE>>=
+library(knitr)
+library(xtable)
+library(dplyr)
+library(MASS)
+library(sjmisc)
+library(vcd)
+library(xtable)
+library(tidyverse)
+library(stats)
+library(binom)
+library(ramify)
+library(plotrix)
+opts_chunk$set(fig.path='figure/', fig.align='center', fig.pos='H',fig.width=5, fig.height=4)
+pdf.options(encoding='ISOLatin2.enc') #dodało mi to poklskie znaki w LaTeXu, bo wcześniej nie chciały się konwertować
+@
+
+\begin{document}
+\setcounter{page}{0}
+\title{\textsc{Sprawozdanie 1} \\ \large Analiza danych ankietowych}
+\author{Aleksandra Grzeszczuk \\ album 255707 \\[5pt] Jacek Wszoła \\ album 255718}
+\maketitle
+\tableofcontents
+\pagestyle{fancy}
+\thispagestyle{empty}
+\newpage
+
+\section{Lista 1}
+
+\subsection{Zadanie 1}
+
+<<echo = FALSE, eval = TRUE>>=
+dane <- read.csv("C:/Users/olagr/Desktop/ADA/Choroba.csv", sep = ";")
+@
+
+Po wczytaniu danych z pliku \texttt{Choroba.csv} zmodyfikujemy nasze dane, tak abyśmy mogli operaować a nich w łatwiejszy sposób. Łatwo sprawdzić, że mamy do czynienia z danymi typu \texttt{integer}, tzn. zmiennymi jakościowymi. Prościej będzie posługiwać się zmiennymi typu \texttt{factor}, tzn. zmiennymi ilościowymi, które -- w przeciwieńsywie do zmiennych jakościowych -- są mierzalne i możliwe do uporządkowania.
+
+<<echo = TRUE, eval = TRUE>>=
+dane <- mutate(dane, across(c("STATUS", "SEKTOR", "CHORY_ZD", "OSZCZED"), 
+                            as.factor))
+@
+
+Zmienimy jeszcze nazwy zmiennych, aby prościej tworzyć legendy przy wykresach.
+
+<<echo = TRUE, eval = TRUE>>=
+dane <- dane %>% mutate(STATUS = fct_recode(STATUS, "Wysoki" = "1", 
+                                            "Średni" = "2", "Niski" = "3")) 
+dane <- dane %>% mutate(OSZCZED = fct_recode(OSZCZED, 
+                                            "Posiada oszczędności" = "1", 
+                                            "Nie posiada oszczędności" = "0"))
+dane <- dane %>% mutate(CHORY_ZD = fct_recode(CHORY_ZD, "Chory" = "1", 
+                                            "Zdrowy" = "0"))
+@
+
+\subsubsection{Podpunkt A}
+
+Naszym zadaniem jest sporządzenie tablic liczności dla zmiennych \texttt{Oszczędności} oraz \\
+\texttt{Chory/Zdrowy}, biorąc pod uwagę wszystkie dane, jak również w podgrupach: ze względu na zmienne \texttt{Status}, \texttt{Sektor} (razem i z osobna).
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#TABLICE LICZNOŚCI DLA CHORY/ ZDROWY I SEKTOR
+#dane %>% filter(SEKTOR == "1") %>% count(CHORY_ZD)
+#dane %>% filter(SEKTOR == "2") %>% count(CHORY_ZD)
+Sektor <- c("I", "II")
+Zdrowy <- c("95", "45")
+Chory <- c("22", "34")
+tabela_1 <- data.frame(c(Sektor), 
+                       c(Zdrowy), 
+                       c(Chory))
+
+colnames(tabela_1) <- paste0(c("SEKTOR", "ZDROWY", "CHORY"))
+tab_1 <- xtable(tabela_1, caption = "Zestawienie zmiennych CHORY/ZDROWY i SEKTOR")
+print(tab_1, type = "latex", table.placement = "H")
+@
+
+Widzimy, że w sektorze pierwszym mieszka $117$ osób z czego $81.2 \%$ jest zdrowych. Sektor drugi zamieszkuje jedynie $79$ osób i tylko $57 \%$ z nich jest zdrowych. Można na tej podstawie wywnioskować, że osoby z sektora II mają utrudniony dostęp do lekarzy, przychodni, mieszkają z dala od szpitali. 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#TABELE LICZNOŚCI DLA CHORY/ ZDROWY I STATUS
+#dane %>% filter(STATUS == "Wysoki") %>% count(CHORY_ZD) 
+#dane %>% filter(STATUS == "Średni") %>% count(CHORY_ZD) 
+#dane %>% filter(STATUS == "Niski") %>% count(CHORY_ZD)
+Status <- c("Wysoki", "Średni", "Niski")
+Zdrowy <- c("53", "36", "51")
+Chory <- c("24", "13", "19")
+tabela_2 <- data.frame(c(Status),
+                       c(Zdrowy),
+                       c(Chory))
+
+colnames(tabela_2) <- paste0(c("STATUS", "ZDROWY", "CHORY"))
+tab_2 <- xtable(tabela_2, caption = "Zestawienie zmiennych CHORY/ZDROWY i STATUS")
+print(tab_2, type = "latex", table.placement = "H")
+@
+
+W badanej grupie najwięcej jest osób o wysokim statusie -- aż $77$ z czego jedynie $68 \%$ zdrowych. Osób ze średnim statusem jest najmniej, bo jedynie $49$, ale to właśnie ta grupa ma największy odsetek osób zdrowych równy $73.5 \%$. Grupa osób ze statusem niskim ($70$) posiada również wysoki odsetek osób zdrowych, bo $72.9 \%$. Możemy stąd wywnioskować, że osoby o~statusie niskim bądź średnim mają mniej zmartwień, przez co są zdrowsze od osób o wysokim statusie - zawzyczaj pracoholików. 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#TABLICE LICZNOŚCI DLA OSZCZEDNOSCI I STATUS
+#dane %>% filter(STATUS == "Wysoki") %>% count(OSZCZED) 
+#dane %>% filter(STATUS == "Średni") %>% count(OSZCZED) 
+#dane %>% filter(STATUS == "Niski") %>% count(OSZCZED)
+Status <- c("Wysoki", "Średni", "Niski")
+Posiada <- c("60", "24", "22")
+Nie_posiada <- c("17", "25", "48")
+tabela_3 <- data.frame(c(Status),
+                       c(Posiada),
+                       c(Nie_posiada))
+
+colnames(tabela_3) <- paste0(c("STATUS", "OSZCZĘDNOŚCI", "BRAK OSZCZĘDNOŚCI"))
+tab_3 <- xtable(tabela_3, caption = "Zestawienie zmiennych STATUS i OSZCZEDNOŚCI")
+print(tab_3, type = "latex", table.placement = "H")
+@
+
+Nie trzeba analizować wartości procentowych, żeby zauważyć, że prawie wszystkie osoby o wysokim statusie posiadają oszczędności. W pozostałych grupach zdecydowana większość ich nie gromadzi. Możemy stąd wywnioskać, że nie mają z czego odkładać, bądź wydają zbyt pochopnie, nie patrząc na ewentualne przyszłe wydatki. 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#TABLICE LICZNOŚCI DLA OSZCZEDNOSCI I SEKTOR
+#dane %>% filter(SEKTOR == "1") %>% count(OSZCZED)
+#dane %>% filter(SEKTOR == "2") %>% count(OSZCZED)
+Sektor <- c("I", "II")
+Posiada1 <- c("52", "54")
+Nie_posiada1 <- c("65", "25")
+tabela_4 <- data.frame(c(Sektor),
+                       c(Posiada1),
+                       c(Nie_posiada1))
+
+colnames(tabela_4) <- paste0(c("SEKTOR", "MA OSZCZED", "NIE MA OSZCZED"))
+tab_4 <- xtable(tabela_4, caption = "Tabela wielodzielcza uwzględniająca zmienną SEKTOR oraz OSZCZEDNOŚCI")
+print(tab_4, type = "latex", table.placement = "H")
+@
+
+Jedynie $44.4 \%$ osób z pierwszego sektora posiada oszczędności, podczas gdy z drugiego jest to aż $68.4 \%$. Jest to dość zaskakujące, ponieważ, jak już wyżej przeanalizowaliśmy, zdecydowana większość osób zdrowych mieszka w sektorze I.
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#CHORY/ ZDROWY, SEKTOR I STATUS
+#dane %>% filter(STATUS == "Wysoki", SEKTOR == "1") %>% count(CHORY_ZD) 
+#dane %>% filter(STATUS == "Wysoki", SEKTOR == "2") %>% count(CHORY_ZD) 
+#dane %>% filter(STATUS == "Średni", SEKTOR == "1") %>% count(CHORY_ZD) 
+#dane %>% filter(STATUS == "Średni", SEKTOR == "2") %>% count(CHORY_ZD) 
+# %>% filter(STATUS == "Niski", SEKTOR == "1") %>% count(CHORY_ZD) 
+#dane %>% filter(STATUS == "Niski", SEKTOR == "2") %>% count(CHORY_ZD) 
+Status <- c("Wysoki", "Wysoki", "Średni", "Średni", "Niski", "Niski")
+Sektor <- c("1", "2", "1", "2", "1", "2")
+Zdrowy1 <- c("31", "22", "23", "13", "41", "10")
+Chory1 <- c("7", "17", "3", "10", "12", "7")
+tabela_5 <- data.frame(c(Status),
+                       c(Sektor),
+                       c(Zdrowy1),
+                       c(Chory1))
+
+colnames(tabela_5) <- paste0(c("STATUS", "SEKTOR", "ZDROWY", "CHORY"))
+tab_5 <- xtable(tabela_5, caption = "Zestawienie zmiennych STATUS, SEKTOR i CHORY/ZDROWY")
+print(tab_5, type = "latex", table.placement = "H")
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#OSZCZEDNOSCI, SEKTOR I STATUS
+#dane %>% filter(STATUS == "Wysoki", SEKTOR == "1") %>% count(OSZCZED) 
+#dane %>% filter(STATUS == "Wysoki", SEKTOR == "2") %>% count(OSZCZED) 
+#dane %>% filter(STATUS == "Średni", SEKTOR == "1") %>% count(OSZCZED) 
+#dane %>% filter(STATUS == "Średni", SEKTOR == "2") %>% count(OSZCZED) 
+#dane %>% filter(STATUS == "Niski", SEKTOR == "1") %>% count(OSZCZED) 
+#dane %>% filter(STATUS == "Niski", SEKTOR == "2") %>% count(OSZCZED) 
+
+Status <- c("Wysoki", "Wysoki", "Średni", "Średni", "Niski", "Niski")
+Sektor <- c("1", "2", "1", "2", "1", "2")
+Posiada2 <- c("27", "33", "11", "13", "14", "8")
+Nie_posiada2 <- c("11", "6", "15", "10", "39", "9")
+tabela_6 <- data.frame(c(Status),
+                       c(Sektor),
+                       c(Posiada2),
+                       c(Nie_posiada2))
+
+colnames(tabela_6) <- paste0(c("STATUS", "SEKTOR", "OSZCZĘDNOŚCI", "BRAK OSZCZĘDNOŚCI"))
+tab_6 <- xtable(tabela_6, caption = "Zestawienie zmiennych STATUS, SEKTOR i OSZCZĘDNOŚCI")
+print(tab_6, type = "latex", table.placement = "H")
+@
+
+\subsubsection{Podpunkt B}
+
+Sporządzamy tabelę wielodzielczą uwzględniającą zmienne \texttt{Chory/Zdrowy} oraz \texttt{Sektor}.
+
+<<echo = FALSE, eval = FALSE>>=
+dane %>% flat_table(SEKTOR, CHORY_ZD)
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+Sektor <- c("I", "II")
+Zdrowy <- c("95", "45")
+Chory <- c("22", "34")
+tabela_1 <- data.frame(c(Sektor), 
+                       c(Zdrowy), 
+                       c(Chory))
+
+colnames(tabela_1) <- paste0(c("SEKTOR", "ZDROWY", "CHORY"))
+tab_1 <- xtable(tabela_1)
+print(tab_1, type = "latex", table.placement = "H")
+@
+
+%NIE USUWAJ TEGO KODU, ON MUSI ZOSTAĆ!
+<<echo = TRUE, eval = TRUE>>=
+dane%>%group_by(SEKTOR)%>%frq(CHORY_ZD)
+@
+
+
+\subsubsection{Podpunkt C}
+
+Ponownie sporządzamy tabelę wielodzielczą, uwzględniającą tym razem zmienne \texttt{Chory/Zdrowy} oraz \texttt{Status}.
+
+<<echo = FALSE, eval = FALSE>>=
+dane %>% flat_table(STATUS, CHORY_ZD)
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+Status <- c("Wysoki", "Średni", "Niski")
+Zdrowy <- c("53", "36", "51")
+Chory <- c("24", "13", "19")
+tabela_1 <- data.frame(c(Status), 
+                       c(Zdrowy), 
+                       c(Chory))
+
+colnames(tabela_1) <- paste0(c("STATUS", "ZDROWY", "CHORY"))
+tab_1 <- xtable(tabela_1)
+print(tab_1, type = "latex", table.placement = "H")
+@
+
+%NIE USUWAJ TEGO KODU, ON MUSI ZOSTAĆ!
+<<echo = TRUE, eval = TRUE>>=
+dane%>%group_by(STATUS)%>%frq(CHORY_ZD)
+@
+
+\subsubsection{Podpunkt D}
+
+Naszym kolejnym zadaniem jest przeprowadzenie kategoryzacji zmiennej \texttt{Wiek}. Kategoryzacja zmiennych nazywana jest również grupowaniem -- jest to proces budowania nowych zmiennych na podstawie już istniejących. 
+
+<<echo = TRUE, eval = TRUE>>=
+dane <- mutate(dane, KATEGORIA_WIEKOWA = 
+                 cut(WIEK, breaks = c(0, 13, 28, 42, 62, Inf), 
+                 labels = c("<= 13", "13-28", "28-42", "42-62", ">=62")))
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+age <- dane %>% group_by(KATEGORIA_WIEKOWA) %>% count()
+tabela_D <- data.frame(c(age))
+colnames(tabela_D) <- c("KATEGORIA WIEKOWA", "$n$")
+tab_D <- xtable(tabela_D, caption = "Kategoryzacja zmiennej wiek")
+print(tab_D, type = "latex", table.placement = "H")
+@
+
+Analizując powyższą tabelę, widzimy, że najwięcej jest osób w wieku do $28$ roku życia. Powyżej, liczba osób stopniowo maleje. Średnia wieku w Polsce wynosi około $75$ lat, zatem nie dziwi nas, że osób powyżej $62$ roku życia jest najmniej -- jedynie $13$.
+
+\subsubsection{Podpunkt E}
+
+Skupimy się teraz na zmiennej \texttt{Status}. Poniżej prezentujemy jej wykresy; kołowy i słupkowy.
+
+<<Wykres-kolowy, echo = FALSE, eval = TRUE, fig.width = 8, fig.height = 4>>=
+par(mfrow=c(1,2))
+arg <- table(dane$STATUS)
+pie(arg, col = c("#702963", "#DE5D83", "#D19FE8"))
+arg <- table(dane$STATUS)
+barplot(arg, col = c("#F984E5", "#FADADD", "#DB7093"), main = "Status")
+@
+
+Spoglądając na wykres kołowy, możemy domyślać się, że osób o statusie wysokim oraz niskim jest tyle samo, zaś ze średnim -- niewiele mniej. Diagramy kołowe nie są jednak zbyt dokładne, dlatego w precyzyjniejszej analizie pomaga nam wykres słupkowy, który ostatecznie informuje, że osób z wysokim oraz niskim statusem jest najwięcej zaś ze średnim zdecydowanie mniej.
+
+\subsubsection{Podpunkt F}
+
+Sporządzimy teraz skategoryzowane wykresy zmiennej \texttt{Chory/Zdrowy} przyjmując za zmienną kategoryzującą zmienną \texttt{Sektor}.
+
+<<echo = FALSE, eval = TRUE>>=
+ggplot(dane, aes(x = CHORY_ZD, fill = SEKTOR)) + 
+  geom_bar() + 
+  labs(x= NULL, y = NULL) + 
+  facet_wrap(~SEKTOR)
+@
+
+Widzimy, że w sektorze I mieszka zdecydowanie więcej osób zdrowych oraz zdecydowanie mniej chorych niż w sektorze II.
+
+\subsection{Zadanie 2}
+
+Dane w pliku \texttt{Reakcja.csv} zawierają informacje o reakcji na lek. Naszym zadaniem będzie sporządzenie wykresów zmiennej \texttt{Reakcja} w całej badanej grupie i w podgrupach ze względu na kategorie pozostałych zmiennych. Poiżej prezentujemy odpowiednie wykresy.
+
+<<echo = FALSE, eval = TRUE>>=
+zad2 <- read.csv("C:/Users/olagr/Desktop/ADA/Reakcja.csv", sep = ";")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+zad2 <- mutate(zad2, across(c("Dawka", "Reakcja", 
+                              "Rodzaj", "Miejsce"), as.factor))
+@
+
+<<echo = FALSE, eval = TRUE>>=
+zad2 <- zad2 %>% mutate(Reakcja = fct_recode(Reakcja, 
+                                            "Nie" = "0", 
+                                            "Tak" = "1"))
+zad2 <- zad2 %>% mutate(Rodzaj = fct_recode(Rodzaj, "Firma I" = "0", 
+                                            "Firma II" = "1"))
+zad2 <- zad2 %>% mutate(Miejsce = fct_recode(Miejsce, 
+                                            "Dom" = "0", 
+                                            "Szpital" = "1"))
+@
+
+<<echo = FALSE, eval = TRUE, fig.width = 8, fig.height = 4>>=
+par(mfrow=c(1,2))
+arg <- table(zad2$Reakcja)
+barplot(arg, col = c("#F984E5", "#FADADD"), main = "Czy nastąpiła poprawa?")
+arg <- table(zad2$Reakcja, zad2$Dawka)
+barplot(arg, col = c("#F984E5", "#FADADD"), main = "Reakcja i dawka")
+arg <- table(zad2$Reakcja, zad2$Miejsce)
+barplot(arg, col = c("#F984E5", "#FADADD"), main = "Reakcja i miejsce")
+arg <- table(zad2$Reakcja, zad2$Rodzaj)
+barplot(arg, col = c("#F984E5", "#FADADD"), main = "Reakcja i rodzaj")
+@
+
+%TEGO TEŻ NIE USUWAJ
+<<echo = TRUE, eval = TRUE>>=
+zad2%>%group_by(Miejsce)%>%frq(Reakcja)
+@
+
+Przyglądając się powyższym wykresom oraz tabeli wielodzielczej, widzimy, że poprawa wystąpiła w znacznej mniejszości badanej grupy. Wpływ na wystąpienie poprawy z dużym prawdopodobieństwem miało miejsce leczenia -- aż $86 \%$ pacjentów leczonych w domu nie wyzdrowiało, podczas gdy w szpitalu było to "jedynie" $61 \%$. Możemy po tym wnioskować, że w domu niekoniecznie poprawnie reagowano na różne stany chorobowe, powikłania, nie zwalczano wystarczająco objawów.
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+#RODZAJ, MIEJSCE I REAKCJA
+#zad2 %>% filter(Rodzaj == "Firma I", Miejsce == "Pacjencji leczeni w domu") %>% count(Reakcja) 
+#zad2 %>% filter(Rodzaj == "Firma II", Miejsce == "Pacjencji leczeni w domu") %>% count(Reakcja) 
+#zad2 %>% filter(Rodzaj == "Firma I", Miejsce == "Pacjencji leczeni w szpitalu") %>% count(Reakcja) 
+#zad2 %>% filter(Rodzaj == "Firma II", Miejsce == "Pacjencji leczeni w szpitalu") %>% count(Reakcja) 
+Rodzaj <- c("Firma I", "Firma I", "Firma II", "Firma II")
+Miejsce <- c("Dom", "Szpital", "Dom", "Szpital")
+Poprawa <- c("5", "19", "9", "20")
+Nie_poprawa <- c("45", "31", "41", "30")
+tabela_7 <- data.frame(c(Rodzaj),
+                       c(Miejsce),
+                       c(Poprawa), 
+                       c(Nie_poprawa))
+
+colnames(tabela_7) <- paste0(c("RODZAJ", "MIEJSCE", "NASTĄPIŁA POPRAWA", "BRAK POPRAWY"))
+tab_7 <- xtable(tabela_7, caption = "Zależność wystąpienia poprawy")
+print(tab_7, type = "latex", table.placement = "H")
+@
+
+Poprawa stanu zdrowia nie zależała także od różnych rodzajów leków - wyniki z obydwu firm są prawie identyczne.  
+
+\newpage
+\section{Lista 2 i 3}
+\subsection{Zadanie 1}
+
+Rozważamy pewną hipotetyczną bazę danych. Za pomocą funkcji \texttt{sample()} w pakiecie \texttt{stats} wylosujemy próbkę rozmiaru około 1/10 liczby obserwacji. Rozważymy losowanie ze zwracaniem oraz bez zwracania. Obie metody przetestujemy dla konkretnych danych, w tym przypadku \texttt{survey} z biblioteki \texttt{MASS}. 
+
+<<2-1, echo=TRUE, eval=TRUE, results='markup'>>=
+losowanie <- function(x, zwr){
+  if(zwr == TRUE){
+    return(sample(x, round(length(x)/10), replace = TRUE))
+  }
+  else{
+    return(sample(x, round(length(x)/10), replace = FALSE))
+  }
+}
+
+losowanie(survey$Age, zwr = TRUE)
+losowanie(survey$Age, zwr = FALSE)
+
+@
+
+\subsection{Zadanie 2}
+
+Zajmiemy się teraz estymacją przedziałową parametru $p$ z rozkładu dwumianowego $\mathcal{B}(n,p)$. W~tym celu przeprowadzimy szereg symulacji i znając rzeczywistą wartość parametru $p$, zbadamy dokładność różnych metod estymacji. Szczególną uwagę zwrócimy na cechy takie jak:
+\begin{itemize}
+  \item prawdopodobieństwo pokrycia,
+  \item długość przedziału ufności,
+  \item podatność na zmianę parametrów rozkładu.
+\end{itemize}
+Będziemy badać trzy metody konstrukcji przedziałów ufności: Cloppera-Pearsona, Walda oraz Wilsona. We wszystkich przypadkach uwzględnimy poziom ufności równy 0.95, a w symulacjach posłużymy się funkcją \texttt{binom.confint()} z pakietu \texttt{binom}.
+
+Przy ustalonych wartościach parametrów $n,p$ będziemy tworzyć $10.000$ prób z rozkładu $\mathcal{B}(n,p)$. Każdej próbie przyporządkujemy przedział ufności obliczony zgodnie z odpowiednią metodą. Na podstawie realizacji obliczymy średnią długość przedziałów ufności oraz prawdopodobieństwa pokrycia, zgodnie z poniższym kodem.
+
+<<2-2, echo=TRUE, eval=TRUE, results='hide'>>=
+
+ps <- seq(0.05, 0.95, 0.05)
+#n = liczba prób, m = metoda estymacji
+int.test <- function(n, m){
+  ps <- seq(0.05, 0.95, 0.05)
+  pr.pokrycia <- c()
+  sr.dlugosc <- c()
+  for(p in ps){
+    X <- rbinom(10000, n, p)
+    intervals <- binom.confint(X, n, conf.level = 0.95, methods = m)
+    lefts <- intervals$lower
+    rights <- intervals$upper
+    Y <- 0
+    dl <- c()
+    for(i in 1:10000){
+      dl[i] <- rights[i] - lefts[i]
+      if((lefts[i] <= p) & (p <= rights[i])){
+        Y <- Y+1
+      }
+    }
+    pr.pokrycia <- append(pr.pokrycia, Y/10000)
+    sr.dlugosc <- append(sr.dlugosc, mean(dl))
+  }
+  return(c(pr.pokrycia, sr.dlugosc))
+}
+
+@
+
+Spośród trzech badanych metod to metoda Cloppera-Pearsona cechuje się najwyższym prawdopodobieństwem pokrycia. Jest ono bowiem najmniej podatne na zmianę parametrów rozkładu. Największe prawdopodobieństwo pokrycia otrzymujemy przy małych wartościach $n$,~jednak przy dużych wartościach w najgorszym wypadku nie przekracza ono 95\%. Można więc powiedzieć, że dokładność tej metody jest satysfakcjonująca.
+
+W przypadku metody Walda obserwujemy, że najgorzej radzi sobie ona dla skrajnych (bliskich 0 lub 1) wartości $p$. Wówczas prawdopodobieństwo pokrycia spada nawet do 87\%. Warto również podkreślić, że dla $n=50$ oraz $n=100$ prawdopodobieństwa pokrycia są zbliżone. Podobnie jest w przypadku metody Wilsona, choć tutaj prawdopodobieństwo pokrycia nie spada poniżej 93\%, a dla małych wartości $n$ jest ono bardzo bliskie 100\%. Metoda ta dla tego rzędu parametru $n$ okazuje się efektywniejsza niż Metoda Cloppera-Pearsona, która lepiej sprawdza się większych wartości $n$.
+
+Przechodząc do średniej długości przedziałów ufności, obserwujemy, że najlepiej wypada metoda Wilsona. Długość najdłuższego przedziału to około 0.5. We wszystkich przypadkach najdłuższe przedziały otrzymujemy dla małych wartości $n$ oraz $p=1/2$, przy zachowaniu symetrii względem parametru $p$.Jeśli chodzi zaś o próby większego rozmiaru, wszystkie badane metody dają podobne wyniki w granicach od 0.07 do 0.3. Metodę Walda cechują krótkie przedziały dla skrajnych wartości $p$, niezależnie od wartości $n$.
+
+Trudno jednoznacznie określić, która z badanych metod jest najlepsza. Metoda Cloppera-Pearsona daje wysokie prawdopodobieństwa pokrycia, jednak przedziały są najdłuższe. Metoda Wilsona generuje z kolei najkrótsze przedziały, jednak dla dużych wartości $n$ prawdopodobieństwa pokrycia mogą być niesatysfakcjonujące.
+
+<<2-3, echo=FALSE, eval=TRUE, results='hide', fig.cap = "Wyniki symulacji -- prawdopodobieństwa pokrycia", fig.width=8, fig.height=5>>=
+
+set.seed(1)
+
+aty <- seq(0.8, 1, 0.02)
+atx <- seq(0.05, 1, 0.1)
+
+par(mfrow=c(1,3))
+
+plot(ps, int.test(10, "exact")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     main = "Metoda Cloppera-Pearsona", xlab = "p", ylab = "pr. pokrycia", col = "darkgreen", ylim = c(0.8, 1))
+par(new=TRUE)
+plot(ps, int.test(50, "exact")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "red", ylim = c(0.8, 1))
+par(new=TRUE)
+plot(ps, int.test(100, "exact")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "blue", ylim = c(0.8, 1))
+axis(side = 1, at = atx)
+axis(side = 2, at = aty)
+legend("bottomright", legend=c("n=10", "n=50", "n=100"), col=c("darkgreen", "red", "blue"), lty = c(1, 1, 1))
+
+plot(ps, int.test(10, "asymptotic")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     main = "Metoda Walda", xlab = "p", ylab = "pr. pokrycia", col = "darkgreen", ylim = c(0, 1))
+par(new=TRUE)
+plot(ps, int.test(50, "asymptotic")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "red", ylim = c(0.8, 1))
+par(new=TRUE)
+plot(ps, int.test(100, "asymptotic")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "blue", ylim = c(0.8, 1))
+axis(side = 1, at = atx)
+axis(side = 2, at = aty)
+legend("bottomright", legend=c("n=10", "n=50", "n=100"), col=c("darkgreen", "red", "blue"), lty = c(1, 1, 1))
+
+plot(ps, int.test(10, "wilson")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     main = "Metoda Wilsona", xlab = "p", ylab = "pr. pokrycia", col = "darkgreen", ylim = c(0, 1))
+par(new=TRUE)
+plot(ps, int.test(50, "wilson")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "red", ylim = c(0.8, 1))
+par(new=TRUE)
+plot(ps, int.test(100, "wilson")[1:19], type = "o", yaxt ="n", xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "blue", ylim = c(0.8, 1))
+axis(side = 1, at = atx)
+axis(side = 2, at = aty)
+legend("bottomright", legend=c("n=10", "n=50", "n=100"), col=c("darkgreen", "red", "blue"), lty = c(1, 1, 1))
+
+par(mfrow=c(1,1))
+
+@
+
+<<2-4, echo=FALSE, eval=TRUE, results='hide', fig.cap = "Wyniki symulacji -- długość przedziałów", fig.width=8, fig.height=5>>=
+
+set.seed(1)
+
+aty1 <- seq(0.05, 1, 0.05)
+atx <- seq(0.05, 1, 0.1)
+
+par(mfrow=c(1,3))
+
+plot(ps, int.test(10, "exact")[20:38], type = "l", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     main = "Metoda Cloppera-Pearsona", xlab = "p", ylab = "śr. długość przedziałów ufności", col = "darkgreen")
+par(new=TRUE)
+plot(ps, int.test(50, "exact")[20:38], type = "l", xaxt="n", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "red")
+par(new=TRUE)
+plot(ps, int.test(100, "exact")[20:38], type = "l", xaxt="n", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "blue")
+axis(side = 1, at = atx)
+axis(side = 2, at = aty1)
+legend("topright", legend=c("n=10", "n=50", "n=100"), col=c("darkgreen", "red", "blue"), lty = c(1, 1, 1))
+
+plot(ps, int.test(10, "asymptotic")[20:38], type = "l", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     main = "Metoda Walda", xlab = "p", ylab = "śr. długość przedziałów ufności", col = "darkgreen")
+par(new=TRUE)
+plot(ps, int.test(50, "asymptotic")[20:38], type = "l", xaxt="n", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "red")
+par(new=TRUE)
+plot(ps, int.test(100, "asymptotic")[20:38], type = "l", xaxt="n", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "blue")
+axis(side = 1, at = atx)
+axis(side = 2, at = aty1)
+legend("topright", legend=c("n=10", "n=50", "n=100"), col=c("darkgreen", "red", "blue"), lty = c(1, 1, 1))
+
+plot(ps, int.test(10, "wilson")[20:38], type = "l", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     main = "Metoda Wilsona", xlab = "p", ylab = "śr. długość przedziałów ufności", col = "darkgreen")
+par(new=TRUE)
+plot(ps, int.test(50, "wilson")[20:38], type = "l", xaxt="n", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "red")
+par(new=TRUE)
+plot(ps, int.test(100, "wilson")[20:38], type = "l", xaxt="n", ylim = c(0,1), yaxt='n', xaxt="n", pch = 16,
+     xlab = "", ylab = "", col = "blue")
+axis(side = 1, at = atx)
+axis(side = 2, at = aty1)
+legend("topright", legend=c("n=10", "n=50", "n=100"), col=c("darkgreen", "red", "blue"), lty = c(1, 1, 1))
+
+par(mfrow=c(1,1))
+
+@
+
+\subsection{Zadanie 3}
+
+Informacje zdobyte z poprzedniego zadania wykorzystamy teraz do ponownego przeanalizowania pliku \texttt{reakcja.csv}, tym razem pod kątem przedziałów ufności. W podgrupach ze względu na wielkość dawki będziemy konstruować przedziały ufności, ponownie, na poziomie ufności 0.95. Porównamy wszystkie metody, które oferuje funkcja \texttt{binom.confint()}, i postaramy się wybrać najlepszą z nich.
+
+Wyróżniliśmy w sumie 5 podgrup (ze względu na wielkość dawki) i porównaliśmy 11 metod przedziałów ufności. Wyniki zamieszczamy na poniższych wykresach.
+
+<<2-5, echo=FALSE, eval=TRUE, results='hide', fig.cap = "Porównanie wszystkich metod", fig.width=8, fig.height=5>>=
+
+reakcja <- read.csv("C:/Users/olagr/Desktop/ADA/Reakcja.csv", sep = ";")
+d1 <- reakcja$Reakcja[1:40]
+d2 <- reakcja$Reakcja[41:80]
+d3 <- reakcja$Reakcja[81:120]
+d4 <- reakcja$Reakcja[121:160]
+d5 <- reakcja$Reakcja[161:200]
+
+compare <- function(d){
+  m <- binom.confint(sum(d), 40, conf.level = 0.95)
+  plot(0, pch = "", ylab = "Metoda", xlab = "p", xlim = c(0,1), xaxt = "n", yaxt = "n", ylim = c(0.5,13))
+  axis(side = 1, at = ps)
+  axis(side = 2, at = seq(1, 11, 1))
+  for(i in 1:11){
+    segments(m[i,5], i, m[i,6], i, col = "lightblue", lty = 1, lwd = 5)
+  }
+  legend("topright", cex = 0.8, legend = c("1 = agresti-coull",
+                                "2 = asymptotic",
+                                "3 = bayes",
+                                "4 = cloglog",
+                                "5 = exact",
+                                "6 = logit",
+                                "7 = probit",
+                                "8 = profile",
+                                "9 = lrt",
+                                "10 = prop.test",
+                                "11 = wilson"))
+  lengths <- matrix(m[,6]-m[,5])
+  l <- argmin(lengths, rows = FALSE)
+  segments(m[l,5], l, m[l,6], l, col = "orange", lty = 1, lwd = 5)
+  L <- paste("długość najkrótszego przedziału:", round(lengths[l],3))
+  legend("topleft", cex = 0.8, legend = L)
+}
+
+compare(d1)
+title(main = "Dawka: -3.204")
+
+@
+
+Łatwo stwierdzić, że pod względem długości przedziałów ufności na prowadzenie wysuwają się dwie metody: Bayesa (dla wyższych dawek) oraz Wilsona (dla niższych dawek). Ta obserwacja nasze ustalenia z zadania 2, gdzie stwierdziliśmy, że właśnie metoda Wilsona spośród trzech badanych daje w rezultacie najkrótsze przedziały ufności. Przyjrzyjmy się w szczególności metodom badanym w zadaniu 2 i na podstawie otrzymanych wyników spróbujmy stwierdzić, która z nich sprawdzi się najlepiej w kwestii najwyższego prawdopodobieństwa pokrycia.
+
+Przypomnijmy, że przy klasyfikacji grup, wzięliśmy $n=40$, zatem na wykresach z zadania 2 najbardziej interesują nas czerwone przypadki. W przypadku małych wartości $p$ (a z takimi mamy do czynienia przy dawkach -3.204 oraz -2.903) na pewno nie wybralibyśmy metody Walda, która nie radziła sobie ze skrajnymi wartościami parametrów. Być może warto w tym przypadku podstawić na metodę Cloppera-Pearsona, którą cechowało wysokie prawdopodobieństwo dla dużych $n$, a nawet skrajnych wartości $p$. Metoda Wilsona sprawdzała się nie najgorzej i być może -- ze względu na fakt, że przedziały ufności są krótkie -- to ona stanowi złoty środek w~doborze najoptymalniejszej z metod.
+
+<<2-6, echo=FALSE, eval=TRUE, results='hide', fig.cap = "Porównanie wszystkich metod", fig.width=8, fig.height=10>>=
+
+set.seed(1)
+
+par(mfrow = c(2,1))
+compare(d2)
+title(main = "Dawka: -2.903")
+compare(d3)
+title(main = "Dawka: -2.602")
+compare(d4)
+title(main = "Dawka: -2.301")
+compare(d5)
+title(main = "Dawka: -2")
+
+@
+
+\newpage
+\section{Lista 4 i 5}
+
+\subsection{Zadanie 1}
+
+Przedsatawimy teraz dwie funkcje z pakietu \texttt{stats}: \texttt{binom.test()} oraz \texttt{prop.test()}. Obie funkcje są odpowiedzialne za przeprowadzanie testu hipotezy prostej dotyczącej parametru $p$~w~rozkładzie dwumianowym $\mathcal{B}(1,p)$. Funkcja \texttt{binom.test()} przerowadza test dokładny, z~kolei funkcja \texttt{prop.test()} przeprowadza test asymptotyczny, co więcej, pozwala ona weryfikować hipotezy dotyczące wielu rozkładów dwumianowych. Obie te funkcje są jednak przydatne w~testowaniu hipotez typu (dla ustalonej wartości $p_0$):
+
+\begin{itemize}
+  \item $H_0: p = p_0 \quad \text{przeciwko} \quad H_1: p \neq p_0$,
+  \item $H_0: p \geq p_0 \quad \text{przeciwko} \quad H_1: p < p_0$,
+  \item $H_0: p \leq p_0 \quad \text{przeciwko} \quad H_1: p > p_0$.
+\end{itemize}
+
+\subsection{Zadanie 2}
+
+Na podstawie danych zawartych w pliku \texttt{Reakcja.csv}, na poziomie istotności $\alpha = 0.05$ będziemy weryfikować różne hipotezy. W tym celu przeprowadzimy testy, o których mowa w~Zadaniu~1.
+
+\begin{itemize}
+  \item[(a)] \textit{Prawdopodobieństwo poprawy stanu zdrowia pacjenta leczonego w domu najmniejszą dawką leku jest mniejsze bądź równe $1/2$}.
+  
+<<echo = FALSE, eval = FALSE>>=
+dawka <- c(-2, -2.301, -2.602, -2.903, -3.204)
+max(dawka) 
+@
+  
+Naszą najmniejszą dawką leku jest wartość $-2$. Za pomocą funkcji \texttt{filter()} wybierzemy z~naszych danych tylko te dotyczące pacjentów leczonych w domu, po czym przeprowadzimy test.
+
+<<echo = TRUE, eval = FALSE>>=
+zad2 %>% filter(Miejsce == "Dom", Reakcja == "Tak") %>% count(Dawka)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+n = 14
+p = 0.5 
+x = 6
+binom.test(x, n,  p,  alternative = "greater", conf.level = 0.95)
+@
+
+Widzimy, że estymowane prawdopodobieństwo poprawy stanu zdrowia pacjenta leczonego w domu najmniejszą dawką leku jest równe około $0.429$, czyli zachodzi nierówność $p~=~0.428~\leq~0.5$. Co więcej, wartość $p$-value to $0.788 > \alpha$, zatem nie mamy podstaw do odrzucenia hipotezy.
+
+\item[(b)] \textit{Prawdopodobieństwo poprawy stanu zdrowia pacjenta leczonego w domu najmniejszą dawką leku jest równe prawdopodobieństwu poprawy stanu zdrowia pacjenta leczonego najmniejszą dawką leku, ale w szpitalu.}
+
+Skorzystamy tutaj z funkcji \texttt{prop.test()}, ponieważ mamy do porównania dwa parametry rozkładu dwumianowego.
+
+<<echo = TRUE, eval = FALSE>>=
+zad2 %>% filter(Miejsce == "Szpital", Reakcja == "Tak") %>% count(Dawka)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+n1 = 39
+x1 = 13
+prop.test(c(x,x1), c(n, n1),  alternative = "two.sided", 
+          conf.level = 0.95)
+@
+
+Estymowalne prawdopodobieństwo sukcesu, że pacjent leczony w szpitalu wyzdrowieje wynosi około $p = 0.33$. Dodatkowo widzimy, że wartość $p$-value jest równa $0.7546 > \alpha$, zatem nie mamy podstaw do odrzucenia hipotezy. 
+
+\end{itemize}
+
+Powtórzymy badania, tym razem dla największej dawki leku, wynoszącej $-3.204$.
+
+\begin{itemize}
+\item[(a)] \textit{Prawdopodobieństwo poprawy stanu zdrowia pacjenta leczonego największą dawką leku jest mniejsze bądź równe $0.5$.}
+
+<<echo = TRUE, eval = TRUE>>=
+zad2 %>% filter(Miejsce == "Dom", Reakcja == "Tak") %>% count(Dawka)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+n = 14
+p = 0.5 
+x = 0 #ponieważ nie było poprawy
+binom.test(x, n,  p,  alternative = "greater", conf.level = 0.95)
+@
+
+Widzimy, że u żadnego z pacjentów leczonych w domu największa dawką leku nie nastąpiła poprawa. Zatem prawdopodobieństwo poprawy wynosi $0$. \\
+
+\item[(b)] \textit{Prawdopodobieństwo poprawy stanu zdrowia pacjenta największa dawką leku jest równe prawdopodobieństwu poprawy stanu zdrowia pacjenta leczonego najwiekszą dawką leku, ale w szpitalu.}
+
+Na wstępie widzimy już, że nie zajdzie tutaj równość, ponieważ byli pacjencji leczeni największą dawką leku w szpitalu. Korzystając z funkcji \texttt{prop.test} porównamy dwa parametry rozkładu dwumianowego.
+
+<<echo = TRUE, eval = TRUE, warning = FALSE>>=
+x <- 0
+x1 <- 14
+n <- 3
+n1 <- 39
+prop.test(c(x,x1), c(n, n1),  alternative = "two.sided", 
+          conf.level = 0.95)
+@
+
+Prawdopodobieństwo poprawy w tym wypadku wyniosło: $0.359$, co jest bliskie zeru, ale nie jest jemu równe. Wartość krytyczna \texttt{p-value} wynosi $0.5251 > \alpha $, zatem nie mamy podstaw do odrzucenia hipotezy.
+
+\end{itemize}
+
+\subsection{Zadanie 3}
+
+Teraz, w celu porównania testów dokładnego i asymptotycznego, przeprowadzimy odpowiednie symulacje, dzięki którym zbadamy, jakie czynniki wpływają na dokładność wynonywanego testu. Dla rozkładu dwumianowego $\mathcal{B}(1,p)$ na poziomie istotności 0.05 będziemy testować hipotezę dwustronną $$H_0: p = p_0 \quad \text{przeciwko} \quad H_1: p \neq p_0.$$ Uwzględnimy różne rozmiary prób oraz różne wartości alternatyw; skoncentrujemy się na wartościach $n \in \{10, 50, 100, 1000, 10000\}$ oraz $p_0 \in \{0.05, 0.25, 0.5\}$, pczy czym dobraliśmy $p_0 \leq 0.5$ dobraliśmy ze względu na symetrię.
+
+Zaczniemy od przypadku dla $p_0 = 1/2$. Najpierw stworzymy funkcję, która będzie generowała dane do zestawaienia, tzn. $p$-value, przedziały ufności oraz estymowane wartości parametru $p$. Poniżej prezentujemy fragment kodu.
+
+<<2-7, echo=TRUE, eval=TRUE, results='hide', fig.cap = "Hipoteza dwustronna", fig.width=8, fig.height=10>>=
+
+simulation <- function(p0, alt = "two.sided", ex = TRUE){
+  ns <- c(10, 50, 100, 1000, 10000)
+  p.vals <- c()
+  p.estims <- c()
+  l.confint <- c()
+  r.confint <- c()
+  for(i in 1:5){
+  X <- rbinom(ns[i], 1, p0)
+  suc <- length(which(X==1))
+  if(ex == TRUE){
+    p.test <- binom.test(c(suc, ns[i]-suc), ns[i], p = p0, alternative = alt)
+  }
+  else{
+    p.test <- prop.test(suc, ns[i], p = p0, alternative = alt)
+  }
+  p.vals[i] <- p.test$p.value
+  p.estims[i] <- p.test$estimate
+  l.confint[i] <- p.test$conf.int[1]
+  r.confint[i] <- p.test$conf.int[2]
+  }
+  return(data.frame(p.vals, p.estims, l.confint, r.confint))
+}
+
+@
+
+<<2-8, echo=FALSE, eval=TRUE, results='hide', fig.cap = "Porównanie przedziałów ufności dla $p_0=0.5$", fig.width=8, fig.height=5, message=FALSE, warning=FALSE>>=
+
+
+simulation.plot <- function(p0, alt = "two.sided"){
+  xs <- 1:5
+  ns <- c(10, 50, 100, 1000, 10000)
+  y1 <- max(min(c(simulation(p0, alt)$l.confint, simulation(p0, alt, ex=F)$l.confint) - 0.1), 0.1)
+  y2 <- min(max(c(simulation(p0, alt)$r.confint, simulation(p0, alt, ex=F)$r.confint) + 0.1), 0.9)
+  if((p0 == 0.05) | (p0 == 0.25)){
+    y1 <- 0
+  }
+  
+  plotCI(xs, simulation(p0, alt)$p.estims,
+         ui = simulation(p0, alt)$r.confint, li = simulation(p0, alt)$l.confint,
+         xlab = "n", ylab = "p", pch = 16,
+         col = "blue", xaxt = "n", yaxt = "n", main = paste("Test dokładny dla p =", p0),
+         ylim = c(y1, y2))
+  abline(h = p0, col = "orange")
+  legend("topright", legend=c("przedziały ufności", paste("p =", p0)),
+         col=c("blue", "orange"), lty = c(1, 1))
+  axis(side = 1, at = xs, labels = ns)
+  axis(side = 2, at = seq(0.1, 0.9, 0.1))
+  
+  plotCI(xs, simulation(p0, alt, ex=F)$p.estims,
+         ui = simulation(p0, alt, ex=F)$r.confint, li = simulation(p0, alt, ex=F)$l.confint,
+         xlab = "n", ylab = "p", pch = 16,
+         col = "blue", xaxt = "n", yaxt = "n", main = paste("Test asymptotyczny dla p =", p0),
+         ylim = c(y1, y2))
+  abline(h = p0, col = "orange")
+  legend("topright", legend=c("przedziały ufności", paste("p =", p0)),
+         col=c("blue", "orange"), lty = c(1, 1))
+  axis(side = 1, at = xs, labels = ns)
+  axis(side = 2, at = seq(0.1, 0.9, 0.1))
+  return(y2)
+}
+
+set.seed(1)
+par(mfrow = c(1,2))
+simulation.plot(0.5)
+par(mfrow = c(1,1))
+
+@
+
+Obserwujemy, że długości przedziałów ufności maleją wraz ze wzrostem $n$. Dla $n=10$ przedziały są nieefektywnie długie w obu przypadkach, a estymowane wartości $p$ dalekie od rzeczywistych, choć test dokładny sprawdza się w tym przypadku lepiej niż asymptotyczny. Ta~tendencja jest na ogół (oprócz $n=100$) powtarzalna. Dla $n \geq 1000$ mamy podobne wyniki dla obu testów, z niewielką przewagą testu dokładnego. Zauważmy też, że dla $n = 50$ przedziały ufności generowane przez test asymptotyczny nie zawierają punktu 0.5. Poniżej podajemy również odpowiednie wartości $p$-value dla obu testów.
+
+<<2-9, echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+
+set.seed(1)
+
+values <- matrix(c(simulation(0.5)$p.vals, simulation(0.5, ex = FALSE)$p.vals),
+                 ncol = 2, byrow = FALSE)
+rownames(values) <- c("$n=10$", "$n=50$", "$n=100$", "$n=1000$", "$n=10000$")
+colnames(values) <- c("test dokładny", "test asymptotyczny")
+tab <- xtable(values, digits = 3, row.names = TRUE,
+              caption = "Porównanie $p$-value dla $p_0=0.5$", label = "tab:p=0.5")
+print(tab, type = "latex", table.placement = "H", sanitize.text.function=function(x){x})
+
+@
+
+Widzimy, że dla małych wartości $n$ pod względem $p$-value oba testy wypadają podobnie, z minimalną przewagą testu dokładnego, który przeważa znacznie dla $n=50$. Jednak przy większych rozmiarach prób, tzn. dla  $n \geq 100$, lepsze wyniki zdaje się osiągać test asymptotyczny, w szczególności dla $n=100$.
+
+Pozostałe przypadki zbadamy bardziej zwięźle. Weźmy teraz $p_0 = 0.25$. Badane testy generują nam następujące przedziały ufności.
+
+<<2-10, echo=FALSE, eval=TRUE, results='hide', fig.cap = "Porównanie przedziałów ufności dla $p_0=0.25$", fig.width=8, fig.height=5, message=FALSE, warning=FALSE>>=
+
+set.seed(1)
+par(mfrow = c(1,2))
+simulation.plot(0.25)
+par(mfrow = c(1,1))
+
+@
+
+<<2-11, echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+
+set.seed(1)
+values <- matrix(c(simulation(0.25)$p.vals, simulation(0.25, ex = FALSE)$p.vals),
+                 ncol = 2, byrow = FALSE)
+rownames(values) <- c("$n=10$", "$n=50$", "$n=100$", "$n=1000$", "$n=10000$")
+colnames(values) <- c("test dokładny", "test asymptotyczny")
+tab <- xtable(values, digits = 3, row.names = TRUE,
+              caption = "Porównanie $p$-value dla $p_0=0.25$", label = "tab:p=0.25")
+print(tab, type = "latex", table.placement = "H", sanitize.text.function=function(x){x})
+
+@
+
+W tym przypadku test dokładny zdaje się konstruować krótsze przedziały ufnosci oraz lepiej przybliżać rzeczywistą wartość $p_0$ (z wyjątkiem $n=50$, gdzie lepszy jest test asymptotyczny). Jeśli spojrzymy zaś na wartości $p$-value, widzimy, że pod tym względem test asymptotyczny lepiej radzi sobie dla skrajnych wartości $n$.
+
+Spróbujmy teraz wykonać symulacje dla skrajnie małych $p$. Dla $p=0.05$ odpowiednie wykresy prezentują się następująco.
+
+<<2-12, echo=FALSE, eval=TRUE, results='hide', fig.cap = "Porównanie przedziałów ufności dla $p_0=0.05$", fig.width=8, fig.height=5, message=FALSE, warning=FALSE>>=
+
+set.seed(11)
+par(mfrow = c(1,2))
+simulation.plot(0.05)
+par(mfrow = c(1,1))
+
+@
+
+<<2-13, echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+
+set.seed(11)
+values <- matrix(c(simulation(0.05)$p.vals, simulation(0.05, ex = FALSE)$p.vals),
+                 ncol = 2, byrow = FALSE)
+rownames(values) <- c("$n=10$", "$n=50$", "$n=100$", "$n=1000$", "$n=10000$")
+colnames(values) <- c("test dokładny", "test asymptotyczny")
+tab <- xtable(values, digits = 3, row.names = TRUE,
+              caption = "Porównanie $p$-value dla $p_0=0.05$", label = "tab:p=0.05")
+print(tab, type = "latex", table.placement = "H", sanitize.text.function=function(x){x})
+
+@
+
+Jak się okazuje, dla skrajnych wartości $p_0$ oba testy dają przedziały ufności zbliżonej długości, lecz to test asymptotyczny zdaje się osiągać lepsze wyniki -- zarówno jeśli chodzi o estymację wartości $p_0$, jak i $p$-values, które są większe dla prawie wszystkich wartości $n$. Jedynie w przypadku bardzo dużego rozmiaru próby to test dokładny daje większą (choć i tak stosunkowo małą) $p$-value.
+
+\textbf{Wniosek.} Odpowiedź na pytanie, który z badanych testów jest lepszy, jak to zazwyczaj bywa, nie jest jednoznaczna. Jeśli estymowane prawdopodobieństwo sukcesu jest bliskie wartości 0.5 dla prób małego ($n < 100$) rozmiaru lepiej wybrać test dokładny, zaś dla dużego -- test asymptotyczny. Jeśli estymujemy skrajną wartość prawdopodobieństwa sukcesu, rozsądnym wyborem wydaje się być test asymptotyczny, chyba że mamy do czynienia z bardzo małą próbą. Wówczas to test dokładny sprawdzi się lepiej. 
+
+
+\end{document}

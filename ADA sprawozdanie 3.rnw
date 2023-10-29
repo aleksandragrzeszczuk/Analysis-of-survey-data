@@ -1,0 +1,793 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[OT4]{polski}
+\usepackage[utf8]{inputenc}
+\usepackage[top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[colorlinks=true, linkcolor=black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{dutchcal}
+\usepackage{mathtools}
+\usepackage{tocloft}
+%\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\DeclareMathOperator{\med}{med}
+
+<<global, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE>>=
+library(knitr)
+library(xtable)
+library(gnm)
+library(tidyverse)
+library(stats)
+library(sjmisc)
+opts_chunk$set(fig.path='figure/', fig.align='center', fig.pos='H',fig.width=5, fig.height=4)
+pdf.options(encoding='ISOLatin2.enc') #dodało mi to poklskie znaki w LaTeXu, bo wcześniej nie chciały się konwertować
+@
+
+\begin{document}
+\setcounter{page}{0}
+\title{\textsc{Sprawozdanie 3} \\ \large Analiza danych ankietowych}
+\author{Aleksandra Grzeszczuk \\ album 255707 \\[5pt] Jacek Wszoła \\ album 255718}
+\maketitle
+\tableofcontents
+\pagestyle{fancy}
+\thispagestyle{empty}
+\newpage
+
+\section{Lista 1}
+
+\subsection{Zadanie 1}
+
+Na podstawie danych dotyczących testowania dwóch leków, zawartych w poniższej tabeli, przetestujemy hipotezę o jednakowej skuteczności obu leków (tzn. symetrii rozkładu). Skorzystamy z różnych wariantów testu McNemary’ego.
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+reakcja <- matrix(c(1, 5, 2, 4),
+            nrow = 2, byrow = T,
+            dimnames = list("lek B" = c("N", "P"),
+                            "lek A" = c("N", "P")))
+tab1 <- xtable(reakcja, caption = "Reakcja na lek")
+align(tab1) <- "|r|cc|"
+digits(tab1) <- 0
+print(tab1, type = "latex", table.placement = "H")
+@
+
+\subsubsection{Test McNemary’ego bez poprawki na ciągłość}
+
+W przypadku małej próby ($2 \times 2$) mamy statystykę testową w postaci $$Z = \frac{Y_{12} - Y_{21}}{\sqrt{Y_{12}+Y_{21}}}.$$ Ma ona w przybliżeniu rozkład normalny. Napiszemy funkcję, która zwraca wartość poziomu krytycznego, po czym porównamy go z wartością, jaką zwraca funkcja \texttt{mcnemar.test()}.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+mcnemar.bez.popr <- function(X){
+  Z <- (X[1,2]-X[2,1])/sqrt(X[1,2]+X[2,1])
+  p <- 1 - pchisq(Z^2, 1)
+  return(p)
+}
+
+mcnemar.bez.popr(reakcja)
+mcnemar.test(reakcja, correct = FALSE)
+@
+
+W kosekwencji otrzymujemy te same wartości. Na mocy tego testu, przy $p$-value równym 0.2568, nie mamy podstaw do odrzucenia hipotezy o symetrii.
+
+\subsubsection{Test McNemary’ego z poprawką na ciągłość}
+
+W tej wersji testu statystyka testowa jest w postaci $$Z = \frac{||Y_{12}-Y_{21}| -1|}{\sqrt{Y_{12}+ Y_{21}}}.$$ Postępujemy podobnie, jak w poprzednim przypadku.
+
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+mcnemar.popr <- function(X){
+  Z <- (abs(X[1,2]-X[2,1])-1)^2/(X[1,2]+X[2,1])
+  p <- 1 - pchisq(Z, 1)
+  return(p)
+}
+
+mcnemar.popr(reakcja)
+mcnemar.test(reakcja, correct = TRUE)
+@
+
+Ponownie, otrzymujemy te same wartości i ponownie, przy $p$-value równym 0.4497, nie mamy podstaw do odrzucenia hipotezy o symetrii.
+
+\subsection{Test dokładny}
+
+W przypadku, gdy $n$ jest małe, do weryfikacji hipotezy skorzystamy z testu warunkowego, przy warunku, że $Y_{12} + Y_{21} = n$ i przy założeniu, że rozkład warunkowy $Y_{12} | Y_{12} + Y_{21} = n$ to rozkład dwumianowy $\mathcal{B}(n, 1/2)$. W praktyce, wartość $p$-value liczymy następująco:
+
+$$p =
+\begin{cases}
+2 \cdot \sum_{k=0}^{Y_{12}} \binom{n}{k} \left(\frac{1}{2}\right)^{k} \left(\frac{1}{2}\right)^{n-k} &\text{gdy } Y_{12} < \frac{n}{2}\\
+2 \cdot \sum_{k=Y_{12}}^{n} \binom{n}{k} \left(\frac{1}{2}\right)^{k} \left(\frac{1}{2}\right)^{n-k} &\text{gdy } Y_{12} > \frac{n}{2}\\
+1 &\text{gdy } Y_{12} = \frac{n}{2}
+\end{cases}.$$
+
+Tę funkcję zaimplementujemy poniżej:
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+exact <- function(X){
+  n <- X[1,2] + X[2,1]
+  if(X[1,2] < n/2){
+    k <- seq(0, X[1,2], 1)
+    Y <- choose(n, k)*(1/2)^n
+    p <- 2*sum(Y)
+  }
+  if(X[1,2] > n/2){
+    k <- seq(X[1,2], n, 1)
+    Y <- choose(n, k)*(1/2)^n
+    p <- 2*sum(Y)
+  }
+  else{
+    p <- 1
+  }
+  return(p)
+}
+
+exact(reakcja)
+@
+
+P-wartość wychodzi zbliżona do tej z poprzedniego podpunktu, jest równa ok. 0.4531. Nie mamy więc podstaw do odrzucenia hipotezy o symetrii.
+
+\subsection{Zadania  2 i 3}
+
+Zajmiemy się teraz analizą wyników z dwóch kolokwiów. Zbadamy symetrię, quasi-symetrię, quasi-niezależność, a także sprawdzimy na poziomie istotności $0.05$, czy studenci byli tak samo przygotowani do obu kolokwiów. Rozkład wyników z obu kolokwiów prezentuje poniższa tabela, gdzie w kolumnach mamy wyniki z kolokwium 1, zaś w wierszach -- wyniki z kolokwium 2.
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+wyniki <- matrix(c(4, 3, 1, 0, 0, 0,
+              6, 3, 2, 2, 0, 0,
+              1, 4, 5, 5, 2, 2,
+              0, 10, 15, 18, 5, 2,
+              1, 2, 5, 3, 2, 2,
+              0, 1, 3, 4, 3, 2), nrow = 6, byrow = TRUE,
+              dimnames = list("kol 2" = c("2", "3", "3+", "4", "4+", "5"),
+                              "kol 1" = c("2", "3", "3+", "4", "4+", "5")))
+tab2 <- xtable(wyniki, caption = "Wyniki z kolokwium")
+align(tab2) <- "|r|cccccc|"
+digits(tab2) <- 0
+print(tab2, type = "latex", table.placement = "H")
+@
+
+\subsubsection{Symetria}
+
+W przypadku powyższego zestawu danych nie skorzystamy z testu Browkera, ponieważ przy wykonywaniu algorytmu w dwóch miejscach w mianowniku pojawi się zero, a test zwróci nieokreśloną wartość. Rzeczywiście,
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+mcnemar.test(wyniki)
+@
+
+Skorzaystamy więc z testu ilorazu wiarygodności, zaimplementowanego w funkcji \texttt{glm()} z pakietu \texttt{gnm}. Odpowiednie $p$-value liczymy jako $1-F(g^2)$, gdzie $g^2$ jest wartością statystyki testowej, zaś $F$ jest  dystrybuantą rozkładu $\chi^2$ z $N(N -2)/2$ stopniami swobody. U nas $N=6$, ponieważ rozważamy tabelę $6 \times 6$.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+count <- c(4, 3, 1, 0, 0, 0,
+           6, 3, 2, 2, 0, 0,
+           1, 4, 5, 5, 2, 2,
+           0, 10, 15, 18, 5, 2,
+           1, 2, 5, 3, 2, 2,
+           0, 1, 3, 4, 3, 2)
+kol2 <- gl(6,6, labels = c("2", "3", "3+", "4", "4+", "5"))
+kol1 <- gl(6,1, labels = c("2", "3", "3+", "4", "4+", "5"))
+wyniki.dane <- data.frame(kol1, kol2, count)
+symm <- glm(count ~ Symm(kol1, kol2), data = wyniki.dane, family = poisson)
+
+1 - pchisq(symm$deviance, 6*(6-1)/2)
+@
+
+Przy $p$-value równym 0.1301 nie mamy podstaw do odrzucenia hipotezy o symetrii.
+
+\subsubsection{Quasi-symetria}
+
+Ponownie skorzystamy z testu ilorazu wiarygodności, lecz teraz rozkład $\chi^2$ będzie z $(N-1)(N-2)/2$ stopniami swobody.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+quasi.symm <- glm(count ~ kol1 + kol2 + Symm(kol1, kol2),
+                  data = wyniki.dane, family = poisson)
+1 - pchisq(quasi.symm$deviance, (6-1)*(6-2)/2)
+@
+
+Ponieważ $p$-value jest w przybliżeniu równe 0.9708, ponownie nie mamy podstaw do odrzucenia hipotezy.
+
+\subsubsection{Quasi-niezależność}
+
+W tym przypadku weźmiemy rozkład $\chi^2$ z $(N-1)^2 - N$ stopniami swobody.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+quasi.indep <- glm(count ~ kol1 + kol2 + Diag(kol1, kol2),
+                   data = wyniki.dane, family = poisson)
+1 - pchisq(quasi.indep$deviance, (6-1)^2-6)
+@
+
+Tutaj obserwujemy z kolei, że $p$-value jest stosunkowo małe i wynosi 0.005, więc hipotezę o quasi-niezależności odrzucimy z prawdopobieństwem 1.
+
+\subsubsection{Brzegowa jednorodność}
+
+Chcąc sprawdzić, poziom przygotowania studentów do obu kolokwiów był równy, wystarczy badać brzegową jednorodność rozkładu. W przypadku, gdy zachodzi quasi-symetria, testowanie będzie sprowadzać się do testowania symetrii. Skorzystamy z testu ilorazu wiarygodności zaimplementowanego w funkcji \texttt{anova()}.
+
+<<echo=TRUE, eval=TRUE, results='markup', message=FALSE, warning=FALSE>>=
+comparison <- anova(symm, quasi.symm)
+comparison
+1 - pchisq(17.831, 5)
+@
+
+Mała wartość $p$-value (0.0032) pokazuje, że hipotezę o jednorodności możemy odrzucić z prawdopodobieństwem 1. W szczególności, oznacza to nierówny poziom przygotowania studentów do obu kolokwiów. Nie możemy jednak wyciągać pochopnych wniosków. Zdarzenie, że jedno kolokwium było znacznie trudniejsze niż drugie, ma przecież dodatnie prawdopodobieństwo. Niestety, tej hipotezy nie zweryfikujemy już na podstawie dostarczonych danych.
+
+\newpage
+\section{Lista 2}
+
+Wszystkie poniższe zadania będziemy wykonywać w oparciu o dane w pliku \texttt{Reakcja3.csv}, które zawierają informacje o reakcji na lek (zmienna $Reakcja$ na poziomie $0$, gdy nie nastąpiła poprawa i na poziomie $1$, gdy nastąpiła poprawa), dwóch firm farmaceutycznych (zmienna $Rodzaj$), pacjentów leczonych w domu ($0$) lub w szpitalu $(1)$ - zmienna $Miejsce$. \\
+
+Najpierw wczytamy dane, zamienamy nasze typy danych z jakościowych na ilościowe oraz, w celu usłatwienia dalszych działań, zamienimy nazwy zmiennych - nie będzie trzeba tworzyć byt dużych legend do wykresów.
+
+<<echo = FALSE, eval = TRUE>>=
+dane <- read.csv("C:/Users/olagr/Desktop/ADA/Reakcja3.csv", sep = ";")
+view(dane)
+@
+
+<<echo = TRUE, eval = TRUE, warning = FALSE, message = FALSE>>=
+dane <- mutate(dane, Reakcja = as.factor(Reakcja),
+               Rodzaj = as.factor(Rodzaj),
+               Miejsce = as.factor(Miejsce),
+               Reakcja = fct_recode(Reakcja,"Nie ma poprawy" = "0",
+                                    "Jest poprawa" = "1"),
+               Miejsce = fct_recode(Miejsce, "Dom" = "0", "Szpital" = "1"))
+@
+
+Korzystając z funkcji \texttt{flat-table} tworząca tabelę płaską zamieniamy nasze dane właśnie do takiej tabeli. Wyorzystując funkcję \texttt{as.data.frame(as.table)} przekształcimy nasze dane do nowej tabeli, w której zostaną podane częstości występowania danych zjawisk - \texttt{Freq}.
+
+<<echo = TRUE, eval = TRUE>>=
+dane_nowe <- flat_table(dane)
+addmargins(dane_nowe)
+prop.table(dane_nowe)
+dane.df <- as.data.frame(as.table(dane_nowe))
+dane.df
+@
+
+\subsection{Zadanie 1}
+
+Fumkcja \texttt{glm} z biblioteki \texttt{stats} służy do dopasowania uogólnionych modeli liniowych, określonych przez podanie symbolicznego opisu predyktora liniowego i opisu rozkładu błędu. Wykorzystamy tą funkcję do interpretacji modeli log-liniowych. 
+
+Zadanie pierwsze dotyczy interpretacji modeli log-liniowych hierarchicznie uporządkowanych.
+Ustalmy, że zmienna $Reakcja$ będzie zmienną $W_{1}$, zmienna $Rodzaj$ - $W_{2}$ oraz zmienna $Miejsce$ - $W_{3}$. Na podstawie powyższych danych mamy wyjaśnić znaczenie następujących modeli log-liniowych.
+
+<<echo = FALSE, eval = FALSE>>=
+W1 <- REAKCJA
+W2 <- RODZAJ
+W3 <- MIEJSCE
+@
+
+\begin{itemize}
+\item $[1 \ 3]$ - oznacza, że zmienne $W_{1}$ oraz $W_{3}$ mają dowolne rozkłady oraz zmienne te są niezależne. \\
+Czyli w naszym przypadku otrzymujemy, że zmienne $Reakcja$ oraz $Miejsce$ mają dowolne rozkłady, zaś zmienna $Rodzaj$ ma rozkład równomierny. 
+
+<<echo = TRUE, eval = TRUE>>=
+model1 <- glm(Freq ~ Reakcja + Miejsce,
+              data = dane.df, family = poisson)
+summary(model1)$coefficients
+@
+
+Wyznaczamy jeszcze $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model1), df = df.residual(model1))
+@
+
+Powyższa wartość jest mniejsza niż poziom istotności $\alpha = 0.5$, zatem uznajemy, że model nie jest dobry. To znaczy, że rekacja na lek zależy od tego, gdzie byliśmy leczeni. \\
+
+Porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model1$data, fitted(model1))
+@
+
+W powyższej tabelce również widać, że wartości przyporządkowane przez model różnią się od tych właściwych, co potwierdza naszą hipotezę. 
+
+%
+%
+%
+%
+%
+
+\item $[13]$ - oznacza, że zmienne $W_{1}$ oraz $W_{3}$ mają dowolne rozkłady oraz zmienne te nie są niezależne. \\
+Czyli w naszym przypadku otrzymujemy, że zmienne $Reakcja$ oraz $Miejsce$ mają dowolne rozkłady oraz są zależne. 
+
+<<echo = TRUE, eval = TRUE>>=
+model2 <- glm(Freq ~ Reakcja + Miejsce +
+                Reakcja*Miejsce,
+              data = dane.df, family = poisson)
+summary(model2)$coefficients
+@
+
+Wyznaczamy jeszcze $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model2), df = df.residual(model2))
+@
+
+Powyższa wartość jest większa niż poziom istotności $\alpha = 0.5$, zatem uznajemy, że model jest dobry. To znaczy, że reakcja na lek zależy od miejsca, w którym lek został podany - czy w domu, czy w szpitalu. \\
+
+Porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model2$data, fitted(model2))
+@
+
+Widzimy, że w powyższej tabelce wartości dopasowane przez model nie różnią się zbytnio od tych właściwych, co oznacza, że nasz model jest poprawny. 
+
+%
+%
+%
+%
+%
+
+\item $[1 \ 2 \ 3]$ - oznacza, że zmienne $W_{1}$, $W_{2}$ oraz $W_{3}$ są wzajemnie niezależne. \\
+Czyli w naszym przypadku otrzymujemy, że zmienne $Reakcja$, $Rodzaj$ oraz $Miejsce$ są od siebie niezależne. 
+
+<<echo = TRUE, eval = TRUE>>=
+model3 <- glm(Freq ~ Reakcja + Rodzaj + Miejsce,
+              data = dane.df, family = poisson)
+summary(model3)$coefficients
+@
+
+Wyznaczamy jeszcze $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model3), df = df.residual(model3))
+@
+
+Powyższa wartość jest mniejsza niż poziom istotności $\alpha = 0.5$, zatem uznajemy, że model nie jest dobry. Z tego wynika, że któreś ze zmiennych $Reakcja$, $Rodzaj$ oraz $Miejsce$ są od siebie zależne, czyli jedna z nich ma wpływ na drugą. \\
+
+Porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model3$data, fitted(model3))
+@
+
+Wartości dopasowane przez model widocznie odbiegają od tych właściwych, stąd widzimy, że nasz model nie jest poprawny. 
+
+%
+%
+%
+%
+%
+
+\item $[12 \ 3]$ - oznacza, że zmienne $W_{1}$, $W_{2}$ nie są niezależne, ale zmienna $W_{3}$ jest niezależna od zmiennej $W_{1}$, $W_{2}$. \\
+Czyli w naszym przypadku otrzymujemy, że zmienne $Reakcja$ oraz $Rodzaj$ są zależne, ale zmienna $Miejsce$ jest niezależna i od zmiennej $Reakcja$ i od zmiennej $Rodzaj$. To znaczy, że rekacja na lek zależy od jego rodzaju oraz rekacja na lek i jego rodzaj nie zależy od miejsca podania leku. 
+
+<<echo = TRUE, eval = TRUE>>=
+model4 <- glm(Freq ~ Reakcja + Rodzaj + Miejsce +
+                Reakcja*Rodzaj,
+              data = dane.df, family = poisson)
+summary(model4)$coefficients
+@
+
+Wyznaczamy jeszcze $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model4), df = df.residual(model4))
+@
+
+Powyższa wartość jest mniejsza niż poziom istotności $\alpha = 0.5$, zatem uznajemy, że model nie jest dobry. To znaczy, że reakcja na lek nie zależy od jego rodzaju. \\
+
+Porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model4$data, fitted(model4))
+@
+
+Wartości dopasowane przez model bardzo widocznie odbiegają od tych właściwych, dlatego stwierdzamy, że nasz model nie jest poprawny. 
+
+%
+%
+%
+%
+%
+
+\item $[12 \ 13]$ - oznacza, że przy ustalonej wartości zmiennej $W_{1}$ zmienne $W_{2}$ oraz $W_{3}$ są niezależne. Mówimy więc, że zmienne $W_{2}$ oraz $W_{3}$ są warunkowo niezależne. \\
+Czyli w naszym przypadku oznacza to, że zmienne $Rodzaj$ oraz $Miejsce$ są warunkowo niezależne. Zależą one od ustalonej wartości zmiennej $Reakcja$.
+
+<<echo = TRUE, eval = TRUE>>=
+model5 <- glm(Freq ~ Reakcja + Rodzaj + Miejsce +
+                Reakcja*Rodzaj + Reakcja*Miejsce,
+              data = dane.df, family = poisson)
+summary(model5)$coefficients
+@
+
+Wyznaczamy jeszcze $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model5), df = df.residual(model5))
+@
+
+Powyższa wartość jest większa niż poziom istotności $\alpha = 0.5$, zatem uznajemy, że model jest dobry. \\
+
+Porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model5$data, fitted(model5))
+@
+
+Wartości przyporządkowane przez model są bardzo zbliżone do tych właściwych co potwierdza naszą hipotezę, że model jest poprawnie dopasowany. 
+
+%
+%
+%
+%
+%
+
+\item $[1 \ 23]$ - oznacza, że zmienna $W_{1}$ jest niezależna od zmiennej $W_{2}$ oraz $W_{3}$, ale zmienne $W_{2}$ i $W_{3}$ nie są niezależne. \\
+Czyli w naszym przypadku oznacza to, że zmienne $Reakcja$ jest niezależna od zmiennych $Rodzaj$ i $Miejsce$, ale zmienne $Rodzaj$ i $Miejsce$ są od siebie zależne. 
+
+<<echo = TRUE, eval = TRUE>>=
+model6 <- glm(Freq ~ Reakcja + Rodzaj + Miejsce +
+                Rodzaj*Miejsce,
+              data = dane.df, family = poisson)
+summary(model6)$coefficients
+@
+
+Wyznaczamy jeszcze $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model6), df = df.residual(model6))
+@
+
+Powyższa wartość jest mniejsza niż poziom istotności $\alpha = 0.5$, zatem uznajemy, że model nie jest dobry. To znaczy, że rodzaj szczepionki nie zależy od miejsca, w którym została podana, oraz, że rekacja na lek zależy od rodzaju bądź miejsca. \\
+
+Porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model6$data, fitted(model6))
+@
+
+Wartości przyporządkowane przez model znacznie się różnią od tych właściwych, stad wiemy, że model $[1 \ 23]$ nie jest modelem dobrym. 
+ 
+\end{itemize} 
+ 
+\subsection{Zadanie 2}
+
+W zadaniu drugim mamy przyjąć model log-liniowy $[13]$, oznaczający, że zmienne $W_{1}$ oraz $W_{3}$ mają dowolne rozkłady oraz zmienne te nie są niezależne. 
+
+<<echo = TRUE, eval = TRUE>>=
+model_zad2 <- glm(Freq ~ Reakcja + Rodzaj + Miejsce +
+                Reakcja*Miejsce,
+              data = dane.df, family = poisson)
+@
+
+Wyznaczamy \texttt{p-wartość}.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model_zad2), df = df.residual(model_zad2))
+@
+
+Oraz porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model_zad2$data, fitted(model_zad2))
+@
+
+Widzimy, że model log-liniowy $[13]$ jest dobrze dopasowany, ponieważ wartości dopasowane przez model są bardzo zbliżone do tych właściwych w modelu.
+
+\subsubsection{podpunkt a}
+
+Na podstawie danych \texttt{Reakcja3.csv} mamy oszacować prawdopodobieństwo pozytywnej rekacji ($Reakcja = 1$) pacjenta leczonego w domu ($Miejsce = 0$). Wykorzystamy w tym celu prawdopodobieństwo warunkowe - podzielimy liczności pacjentów leczonych w domu, którzy pozytywnie zareagowali na leczenie przez liczność pacjentów leczonych w domy. 
+
+<<echo = TRUE, eval = TRUE>>=
+zad2_dom <- cbind(model_zad2$data, fitted(model_zad2))
+
+dane_dom_reakcja <- subset(zad2_dom, zad2_dom$Reakcja=="Jest poprawa" &
+                             zad2_dom$Miejsce=="Dom")
+
+dane_dom <- subset(zad2_dom, zad2_dom$Miejsce=="Dom")
+
+sum(dane_dom_reakcja$'fitted(model_zad2)')/sum(dane_dom$'fitted(model_zad2)')
+@
+
+Czyli otrzymaliśmy, że prawdopodobieństwo pozytywnej rekacji dla pacjenta leczonego w~domu wynosi zaledwie $0,14$. 
+
+%
+%
+%
+%
+%
+
+\subsubsection{podpunkt b}
+
+Na podstawie danych \texttt{Reakcja3.csv} mamy oszacować prawdopodobieństwo pozytywnej rekacji ($Reakcja = 1$) pacjenta leczonego w szpitalu ($Miejsce = 1$).
+
+<<echo = TRUE, eval = TRUE>>=
+zad2_szpital <- cbind(model_zad2$data, fitted(model_zad2))
+
+dane_szpital_reakcja <- subset(zad2_szpital, zad2_szpital$Reakcja=="Jest poprawa"
+                               & zad2_szpital$Miejsce=="Szpital")
+
+dane_szpital <- subset(zad2_szpital, zad2_szpital$Miejsce=="Szpital")
+
+sum(dane_szpital_reakcja$'fitted(model_zad2)')/sum(dane_szpital$'fitted(model_zad2)')
+@
+
+Prawdpodobieństwo poprawy pacjenta leczonego w szpitalu wynosi $0,39$. Jest ono około $2,6$ raza większa od prawdopodobieństwa poprawy pacjenta leczonego w szpitalu. To znaczy, że wykwalifikowana opieka medyczna znacznie zwiększa naszą szanse na powrót do zdrowia. Jednakże i tak jest to małe prawdopdobieństwo poprawy. 
+
+%
+%
+%
+%
+%
+
+\subsubsection{podpunkt c}
+
+Zbadamy również, jakie byłyby oszacowania powyższych prawdopodobieństw przy założeniu modelu log-liniowego $[12 \ 13]$ oznaczającego, że zmienne $W_{2}$ oraz $W_{3}$ są warunkowo niezależne. 
+
+<<echo = TRUE, eval = TRUE>>=
+model_zadanie2c <- glm(Freq ~ Reakcja + Rodzaj + Miejsce +
+                Reakcja*Rodzaj + Reakcja*Miejsce,
+              data = dane.df, family = poisson)
+@
+
+Wyznaczamy $p-wartość$.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model_zadanie2c), df = df.residual(model_zadanie2c))
+@
+
+Oraz porównujemy liczności z modelem:
+
+<<echo = TRUE, eval = TRUE>>=
+cbind(model_zadanie2c$data, fitted(model_zadanie2c))
+@
+
+Widzimy ponownie, że model $[12 \ 13]$ jest dobrze dopasowany, ponieważ wartości przez niego przyporządkowane nieznacznie odbiegają od wartości właściwych w modelu. \\
+
+Korzystając z funkcji \texttt{subset} obliczamy prawdopodobieństwo poprawy pacjenta leczonego w domu. 
+
+<<echo = TRUE, eval = TRUE>>=
+zad2c_dom <- cbind(model_zadanie2c$data, fitted(model_zadanie2c))
+
+dane_dom_reakcjac <- subset(zad2c_dom, zad2c_dom$Reakcja=="Jest poprawa" &
+                             zad2_dom$Miejsce=="Dom")
+
+dane_domc <- subset(zad2c_dom, zad2c_dom$Miejsce=="Dom")
+
+sum(dane_dom_reakcjac$'fitted(model_zadanie2c)')/sum(dane_domc$'fitted(model_zadanie2c)')
+@
+
+Czyli prawdopodobieństwo poprawy stanu zdrowia pacjenta leczonego w domu wynosi $0,14$. Tyle samo wynosiło to prawdopodobieństwo w modelu $[13]$. \\
+
+Obliczymy jeszcze prawdopodobieństwo poprawy stanu zdrowia pacjenta leczonego w szpitalu. 
+
+<<echo = TRUE, eval = TRUE>>=
+zad2_szpitalc <- cbind(model_zadanie2c$data, fitted(model_zadanie2c))
+
+dane_szpital_reakcjac <- subset(zad2_szpitalc, zad2_szpitalc$Reakcja=="Jest poprawa" &
+                             zad2_szpitalc$Miejsce=="Szpital")
+
+dane_szpitalc <- subset(zad2_szpitalc, zad2_szpitalc$Miejsce=="Szpital")
+
+sum(dane_szpital_reakcjac$'fitted(model_zadanie2c)')/sum(dane_szpitalc$'fitted(model_zadanie2c)')
+@
+
+I ponownie widzimy, że wyszło nam takie same prawdopobieństwo jak w modelu $[13]$. 
+
+%
+%
+%
+%
+%
+
+\subsection{Zadanie 3}
+
+Na podstawie danych \texttt{Reakcja3.csv} zweryfikujemy $3$ poniższe hipotezy.
+
+%
+%
+%
+%
+%
+
+\subsubsection{podpunkt a}
+
+Zmienne losowe $Reakcja$, $Rodzaj$ oraz $Miejsce$ są wzajemnie niezależne - czyli mamy model log-liniowy postaci $[1 \ 2 \ 3]$.
+
+<<echo = TRUE, eval = TRUE>>=
+model_zadanie3a <- glm(Freq ~ Reakcja + Rodzaj + Miejsce,
+              data = dane.df, family = poisson)
+@
+
+Wyznaczamy $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model_zadanie3a), df = df.residual(model_zadanie3a))
+@
+
+Widzimy, że wartość poziomu krytycznego jest mniejsza niż poziom istotności $\alpha = 0.05$, zatem widzimy, że nasz model $[1 \ 2 \ 3]$ oznaczający niezależność wszystkich zmiennych nie jest poprawny. 
+%
+%
+%
+%
+%
+
+\subsubsection{podpunkt b}
+
+Zmienna losowa $Reakcja$ jest niezależna od pary zmiennych $Rodzaj$ i $Miejsce$ - czyli mamy model log-liniowy postaci $[1 \ 23]$.
+
+<<echo = TRUE, eval = TRUE>>=
+model_zadanie3b <- glm(Freq ~ Reakcja + Rodzaj + Miejsce +
+                Rodzaj*Miejsce,
+              data = dane.df, family = poisson)
+@
+
+Wyznaczamy $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model_zadanie3b), df = df.residual(model_zadanie3b))
+@
+
+Ponownie widzimy, że wartość poziomu krytycznego jest mniejsza niż poziom istotności $\alpha = 0.05$, zatem nasz model $[1 \ 23]$ oznaczający, że rekacja na lek jest nie zależy od rodzaju leku bądź miejsca jego podania jest niepoprawny.
+
+%
+%
+%
+%
+%
+
+\subsubsection{podpunkt c}
+
+Zmienna losowa $Reakcja$ jest niezależna od zmiennej $Miejsce$, przy ustalonej zmiennej $Rodzaj$ - czyli mamy model log-liniowy $[12 \ 23]$.
+
+<<echo = TRUE, eval = TRUE>>=
+model_zadanie3c <- glm(Freq ~ Reakcja + Rodzaj + Miejsce +
+                         Reakcja*Rodzaj + Rodzaj*Miejsce,
+                       data = dane.df, family = poisson)
+@
+
+Wyznaczamy $p-value$ dla powyższego testu.
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model_zadanie3c), df = df.residual(model_zadanie3c))
+@
+
+Wartość poziomu krytycznego jest mniejsza niż poziom istotności $\alpha = 0.05$, zatem przyjmujemy, że model log-liniowy $[12 \ 23]$ jest niepoprawny. Więc reakcja na lek nie jest niezależna od miejsca jego podania przy ustalonym rodzaju podanego leku. \\
+
+Hipoteza zerowa jest postaci $[1\ 2\ 3]$ oraz hipoteza alternatywna - $[1\ 23]$.
+
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model_zadanie3a)-deviance(model_zadanie3b), 
+           df = df.residual(model_zadanie3a)-df.residual(model_zadanie3b))
+@
+
+$p-value$ wyszła nam większa niż $0.05$, czyli przyjmujemy hipotezę zerową $[1\ 2\ 3]$ i odrzucamy hipotezę alternatywną $[1\ 23]$. \\
+
+Potwrazamy zadanie, tym razem za hipotezę zerową przyjmujemy model $[1\ 23]$ a za alternatywną $[12\ 23]$. 
+
+<<echo = TRUE, eval = TRUE>>=
+1 - pchisq(deviance(model_zadanie3b)-deviance(model_zadanie3c), 
+           df = df.residual(model_zadanie3b)-df.residual(model_zadanie3c))
+@
+
+$p-value$ ponownie wychodzi większe niż poziom istotności $\alpha = 0.05$. Zatem ponownie przyjmujemy hipotezę zerwoą i odrzucamy hipotezę alternatywną. 
+
+\subsection{Zadanie 4}
+
+%
+%
+%
+%
+%
+
+Dokonamy teraz wyboru omawianych wyżej modeli log-liniowych różnymi sposobami.
+
+\subsubsection{Testy}
+
+Będziemy porównywać ze sobą poszczególne modele. Za początkowy model przyjmiemy model $[1 \ 2 \ 3]$ i porównamy go z modelem $[12 \ 3]$. Jeśli test wskaże, że odpowiednią hipotezę powinniśmy odrzucić, za nowy model przyjmiemy model $[12 \ 3]$ i porównamy go z kolejnym. Jeśli zaś nie będziemy mieli podstaw do odrzucenia, zostawimy model $[1 \ 2 \ 3]$ i porównamy go z kolejnym. Procedurę powtórzymy aż do ostatniego modelu. Skorzystamy z testu \texttt{anova()}. Na początku testujemy więc $$H_0: [1 \ 2 \ 3] \text{ jest poprawny} \quad \text{przeciwko} \quad H_1: [12 \ 3] \text{ jest poprawny}.$$
+
+<<echo = TRUE, eval = TRUE>>=
+anova(model3, model4)
+1-pchisq(deviance(model3)-deviance(model4),
+         df = df.residual(model3)- df.residual(model4))
+@
+
+$p$-value jest równe 0.4228, więc nie mamy podstaw do odrzucenia hipotezy $H_0$. Zatem zostawiamy $[1 \ 2 \ 3]$. Porównujemy teraz z modelem $[1 \ 23]$.
+
+<<echo = TRUE, eval = TRUE>>=
+anova(model3, model6)
+1-pchisq(deviance(model3)-deviance(model6),
+         df = df.residual(model3)- df.residual(model6))
+#p value duże, zostawiamy model [1 2 3]. porównamy z modelem [2  13]
+
+model7 <- glm(Freq ~ Reakcja+Rodzaj+Miejsce + Miejsce*Reakcja,
+              data = dane.df, family = poisson)
+anova(model3, model7)
+1-pchisq(deviance(model3)-deviance(model7),
+         df = df.residual(model3)- df.residual(model7))
+#p value małe, przyjmujemy model [2 13], który porównamy z modelem [12 13]
+
+anova(model7, model5)
+1-pchisq(deviance(model7)-deviance(model5),
+         df = df.residual(model7)- df.residual(model5))
+#p value duże, zostawiamy model [2 13], który porównamy z modelem [23 13]
+
+model8 <-glm(Freq ~ Reakcja+Rodzaj+Miejsce+Miejsce*Rodzaj+Miejsce*Reakcja,
+             data = dane.df, family = poisson)
+anova(model7, model8)
+1-pchisq(deviance(model7)-deviance(model8),
+         df = df.residual(model7)- df.residual(model8))
+#p-value duże, zostawiamy model [2 13]
+@
+
+Metoda testów pozwoliła nam wybrać model $[2 \ 13]$ jako najlepszy model log-liniowy.
+
+\subsubsection{Kryterium AIC i BIC}
+
+By porównać modele metodami AIC oraz BIC, stworzymy 19 modeli log-liniowych (wszystkie możliwe kombinacje), po czym skorzystamy z funkcji \texttt{AIC} oraz \texttt{BIC}. Wyniki przedstawiamy w poniższej tabeli, z której następnie wyciągniemy odpowiednie wnioski.
+
+<<echo = FALSE, eval = TRUE>>=
+#wyraz wolny
+m0<-glm(Freq ~ NULL, data = dane.df, family = poisson)
+#[1]
+m1<-glm(Freq ~Reakcja, data = dane.df, family = poisson)
+#[2]
+m2<-glm(Freq ~Rodzaj, data = dane.df, family = poisson)
+#[3]
+m3<-glm(Freq ~Miejsce, data = dane.df, family = poisson)
+#[1 2]
+m4<-glm(Freq ~Reakcja + Rodzaj, data = dane.df, family = poisson)
+#[2 3]
+m5<-glm(Freq ~ Rodzaj + Miejsce, data = dane.df, family = poisson)
+#[1 3]
+m6<-glm(Freq ~Reakcja + Miejsce, data = dane.df, family = poisson)
+#[12]
+m7<-glm(Freq ~Reakcja + Rodzaj + Reakcja*Rodzaj, data = dane.df, family = poisson)
+#[23]
+m8<-glm(Freq ~ Rodzaj + Miejsce + Rodzaj*Miejsce, data = dane.df, family = poisson)
+#[13]
+m9<-glm(Freq ~Reakcja + Miejsce + Reakcja*Miejsce, data = dane.df, family = poisson)
+#[1 2 3]
+m10<-glm(Freq ~Reakcja + Rodzaj + Miejsce, data = dane.df, family = poisson)
+#[1 23]
+m11<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Rodzaj*Miejsce, data = dane.df, family = poisson)
+#[2 13]
+m12<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Reakcja*Miejsce, data = dane.df, family = poisson)
+#[3 12]
+m13<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Reakcja*Rodzaj, data = dane.df, family = poisson)
+#[12 23]
+m14<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Reakcja*Rodzaj + Rodzaj*Miejsce, data = dane.df, family = poisson)
+#[13 23]
+m15<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Reakcja*Miejsce + Rodzaj*Miejsce, data = dane.df, family = poisson)
+#[12 13]
+m16<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Reakcja*Rodzaj + Reakcja*Miejsce, data = dane.df, family = poisson)
+#[12 13 23]
+m17<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Reakcja*Rodzaj + Rodzaj*Miejsce + Reakcja*Miejsce, data = dane.df, family = poisson)
+#[123]
+m18<-glm(Freq ~Reakcja + Rodzaj + Miejsce + Reakcja*Rodzaj + Rodzaj*Miejsce + Reakcja*Miejsce + Reakcja*Rodzaj*Miejsce, data = dane.df, family = poisson)
+AIC<-c(AIC(m0),AIC(m1),AIC(m2),AIC(m3),AIC(m4),AIC(m5),AIC(m6),AIC(m7),AIC(m8),AIC(m9),AIC(m10),AIC(m11),AIC(m12),AIC(m13),AIC(m14),AIC(m15),AIC(m16),AIC(m17),AIC(m18))
+BIC<-c(BIC(m0),BIC(m1),BIC(m2),BIC(m3),BIC(m4),BIC(m5),BIC(m6),BIC(m7),BIC(m8),BIC(m9),BIC(m10),BIC(m11),BIC(m12),BIC(m13),BIC(m14),BIC(m15),BIC(m16),BIC(m17),BIC(m18))
+tab<-cbind(AIC,BIC)
+row.names(tab)<-c("0","$[1]$","$[2]$","$[3]$","$[1 : 2]$","$[2 : 3]$","$[1 : 3]$","$[12]$","$[23]$","$[13]$","$[1 : 2 : 3]$","$[1 : 23]$","$[2 : 13]$","$[3 : 12]$","$[12 : 23]$","$[13 : 23]$","$[12 : 13]$","$[12 : 13 : 23]$","$[123]$")
+@
+
+<<echo=FALSE, eval=TRUE, results='asis', message=FALSE, warning=FALSE>>=
+tab_ab <- xtable(tab, caption = "Porównanie AIC i BIC")
+align(tab_ab) <- "|c|rr|"
+print(tab_ab, type = "latex", table.placement = "H", sanitize.text.function=function(x){x})
+@
+
+Ponieważ najlepszym modelem ze względu na kryteria AIC i BIC to te, których wartość jest najmniejsza, więc na podstawie tabeli możemy ustalić, że ze względu na oba kryteria najlepszy jest model $[13]$. Ten model porównamy więc z modelem $[2 \ 13]$, który uzyskaliśmy jako najlepszy poprzez metodę testów. Przetestujemy hipotezę: $$H_0: [13] \text{ jest poprawny} \quad \text{przeciwko} \quad H_1: [2 \ 13] \text{ jest poprawny}.$$
+
+
+<<echo = TRUE, eval = TRUE>>=
+anova(m9, m12)
+1-pchisq(deviance(m9)-deviance(m12),
+         df = df.residual(m9)- df.residual(m12))
+@
+
+Duża wartość $p$-value sugeruje, że nie mamy podstaw do odrzucenia hipotezy o poprawności modeli $[13]$, więc to on będzie najlepszym modelem log-liniowym.
+
+Korzystając z biblioteki \texttt{MASS} i funkcji \texttt{stepAIC} wyznaczamy wartości $AIC$
+
+<<echo = TRUE, eval = TRUE>>=
+MASS::stepAIC(m18)
+@
+
+A następnie korzystając z tej samej biblioteki oraz funkcji $stepAIC(m18, k = log(8))$ wyznaczamy wartości $BIC$. 
+
+<<echo = TRUE, eval = TRUE>>=
+MASS::stepAIC(m18, k = log(8))
+@
+
+
+\end{document}
